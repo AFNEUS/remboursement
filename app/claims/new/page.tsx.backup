@@ -1,0 +1,35 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function NewClaimPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <h1 className="text-3xl font-bold mb-2">📝 Nouvelle demande de remboursement</h1>
+      <p className="text-gray-600 mb-8">Page en construction...</p>
+      
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <p>Fonctionnalités à venir :</p>
+        <ul className="list-disc ml-6 mt-4 space-y-2">
+          <li>🚗 Frais kilométriques avec aller-retour</li>
+          <li>🚄 Train/Bus avec départ/arrivée</li>
+          <li>🏨 Hôtel (nom, adresse, nuits, prix)</li>
+          <li>🔄 Abonnements récurrents (TGV Max...)</li>
+          <li>⛽ Essence, péage, repas...</li>
+          <li>📎 Upload multiple de justificatifs</li>
+        </ul>
+        
+        <button
+          onClick={() => router.push('/claims')}
+          className="mt-6 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
+        >
+          ← Retour aux demandes
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,309 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+
+export default function Navigation() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    checkUser();
+    
+    // Vérifier périodiquement les changements (pour mode test)
+    const interval = setInterval(checkUser, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function checkUser() {
+    // Vérifier le mode test
+    const testUser = localStorage.getItem('test_user');
+    if (testUser) {
+      const parsed = JSON.parse(testUser);
+      setUser(parsed);
+      setUserRole(parsed.role);
+      setLoading(false);
+      return;
+    }
+
+    // Vérifier l'authentification Supabase
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role, first_name, last_name, email')
+        .eq('id', user.id)
+        .single();
+
+      if (userData) {
+        setUser({ ...user, ...(userData as any) });
+        setUserRole((userData as any).role);
+      }
+    } else {
+      setUser(null);
+      setUserRole(null);
+    }
+    setLoading(false);
+  }
+
+  async function handleLogout() {
+    localStorage.removeItem('test_user');
+    await supabase.auth.signOut();
+    setUser(null);
+    setUserRole(null);
+    router.push('/');
+    setTimeout(() => router.refresh(), 100);
+  }
+
+  // Permissions
+  const canAccessDashboard = userRole && ['ADMIN', 'TREASURER', 'VALIDATOR'].includes(userRole);
+  const canValidate = userRole && ['ADMIN', 'VALIDATOR', 'TREASURER'].includes(userRole);
+  const canAccessTreasurer = userRole && ['ADMIN', 'TREASURER'].includes(userRole);
+  const isAdmin = userRole === 'ADMIN';
+
+  const isActive = (path: string) => pathname === path;
+
+  // Ne pas afficher la navbar sur la page de login
+  if (pathname === '/auth/login' || pathname === '/auth/callback') {
+    return null;
+  }
+
+  return (
+    <nav className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg sticky top-0 z-50">
+      <div className="container mx-auto px-4">
+        <div className="flex justify-between items-center h-16">
+          {/* Logo */}
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center gap-2 font-bold text-xl hover:text-blue-100 transition"
+          >
+            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-sm backdrop-blur">
+              AF
+            </div>
+            <span className="hidden sm:inline">AFNEUS</span>
+          </button>
+
+          {/* Desktop Menu */}
+          {!loading && user && (
+            <div className="hidden md:flex items-center gap-1">
+              <button
+                onClick={() => router.push('/claims/new')}
+                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                  isActive('/claims/new')
+                    ? 'bg-white text-blue-600'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                📝 Nouvelle
+              </button>
+
+              <button
+                onClick={() => router.push('/claims')}
+                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                  isActive('/claims')
+                    ? 'bg-white text-blue-600'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                📋 Demandes
+              </button>
+
+              {canAccessDashboard && (
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    isActive('/dashboard')
+                      ? 'bg-white text-blue-600'
+                      : 'text-white hover:bg-white/10'
+                  }`}
+                >
+                  📊 Dashboard
+                </button>
+              )}
+
+              {canValidate && (
+                <button
+                  onClick={() => router.push('/validator')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    isActive('/validator')
+                      ? 'bg-white text-blue-600'
+                      : 'text-white hover:bg-white/10'
+                  }`}
+                >
+                  ✅ Validation
+                </button>
+              )}
+
+              {canAccessTreasurer && (
+                <button
+                  onClick={() => router.push('/treasurer')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    isActive('/treasurer')
+                      ? 'bg-white text-blue-600'
+                      : 'text-white hover:bg-white/10'
+                  }`}
+                >
+                  💰 Trésorerie
+                </button>
+              )}
+
+              {isAdmin && (
+                <button
+                  onClick={() => router.push('/admin/events')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition ${
+                    pathname?.startsWith('/admin')
+                      ? 'bg-white text-blue-600'
+                      : 'text-white hover:bg-white/10'
+                  }`}
+                >
+                  👑 Admin
+                </button>
+              )}
+
+              {/* Profil dropdown */}
+              <div className="relative ml-2">
+                <button
+                  onClick={() => router.push('/profile')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 ${
+                    isActive('/profile')
+                      ? 'bg-white text-blue-600'
+                      : 'text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span>👤</span>
+                  <span className="hidden lg:inline text-sm">
+                    {(user as any).first_name || user.email?.split('@')[0]}
+                  </span>
+                </button>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-lg font-semibold text-white hover:bg-red-500/20 transition ml-2"
+                title="Déconnexion"
+              >
+                🚪
+              </button>
+            </div>
+          )}
+
+          {!loading && !user && (
+            <button
+              onClick={() => router.push('/auth/login')}
+              className="px-6 py-2 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition"
+            >
+              🔐 Se connecter
+            </button>
+          )}
+
+          {/* Mobile Menu Button */}
+          {!loading && user && (
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg text-2xl"
+            >
+              {mobileMenuOpen ? '✕' : '☰'}
+            </button>
+          )}
+        </div>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && user && (
+          <div className="md:hidden py-4 border-t border-white/20">
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={() => {
+                  router.push('/claims/new');
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
+              >
+                📝 Nouvelle Demande
+              </button>
+
+              <button
+                onClick={() => {
+                  router.push('/claims');
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
+              >
+                📋 Mes Demandes
+              </button>
+
+              {canAccessDashboard && (
+                <button
+                  onClick={() => {
+                    router.push('/dashboard');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
+                >
+                  📊 Dashboard
+                </button>
+              )}
+
+              {canValidate && (
+                <button
+                  onClick={() => {
+                    router.push('/validator');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
+                >
+                  ✅ Validation
+                </button>
+              )}
+
+              {canAccessTreasurer && (
+                <button
+                  onClick={() => {
+                    router.push('/treasurer');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
+                >
+                  💰 Trésorerie
+                </button>
+              )}
+
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    router.push('/admin/events');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
+                >
+                  👑 Admin
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  router.push('/profile');
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
+              >
+                👤 Profil
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-red-500/20 transition border-t border-white/20 mt-2"
+              >
+                🚪 Déconnexion
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+}

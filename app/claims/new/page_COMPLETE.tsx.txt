@@ -1,0 +1,397 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
+import { searchCities } from '@/lib/cities-france';
+import { calculateKilometricAmount, formatAmount } from '@/lib/calculations';
+
+type ExpenseType = 'CAR' | 'FUEL' | 'TOLL' | 'TRAIN' | 'BUS' | 'MEAL' | 'HOTEL' | 'SUBSCRIPTION' | 'OTHER';
+
+interface ExpenseItem {
+  id: string;
+  type: ExpenseType;
+  description: string;
+  amount: number;
+  date: string;
+  justificatifs: File[];
+  departure?: string;
+  arrival?: string;
+  isRoundTrip?: boolean;
+  hotelName?: string;
+  hotelAddress?: string;
+  nights?: number;
+  isRecurring?: boolean;
+}
+
+const EXPENSE_TYPES = [
+  { value: 'CAR', label: '🚗 Frais kilométriques' },
+  { value: 'FUEL', label: '⛽ Carburant' },
+  { value: 'TOLL', label: '🛣️ Péage' },
+  { value: 'TRAIN', label: '🚄 Train' },
+  { value: 'BUS', label: '🚌 Bus' },
+  { value: 'MEAL', label: '🍽️ Repas' },
+  { value: 'HOTEL', label: '🏨 Hôtel' },
+  { value: 'SUBSCRIPTION', label: '🔄 Abonnement' },
+  { value: 'OTHER', label: '📄 Autre' },
+];
+
+export default function NewClaimPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [motive, setMotive] = useState('');
+  const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
+  const [currentExpense, setCurrentExpense] = useState<Partial<ExpenseItem>>({
+    type: 'CAR',
+    date: new Date().toISOString().split('T')[0],
+  });
+  
+  const [departure, setDeparture] = useState('');
+  const [arrival, setArrival] = useState('');
+  const [distance, setDistance] = useState('');
+  const [fiscalPower, setFiscalPower] = useState('5');
+  const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
+  const [showArrivalSuggestions, setShowArrivalSuggestions] = useState(false);
+  const [citySuggestions, setCitySuggestions] = useState<any[]>([]);
+  
+  useEffect(() => {
+    loadUser();
+  }, []);
+  
+  async function loadUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/');
+      return;
+    }
+    setUser(user);
+  }
+  
+  function handleCitySearch(value: string, isDepart: boolean) {
+    if (value.length >= 2) {
+      setCitySuggestions(searchCities(value));
+      if (isDepart) {
+        setShowDepartureSuggestions(true);
+      } else {
+        setShowArrivalSuggestions(true);
+      }
+    } else {
+      setShowDepartureSuggestions(false);
+      setShowArrivalSuggestions(false);
+    }
+  }
+  
+  useEffect(() => {
+    if (currentExpense.type === 'CAR' && distance && departure && arrival) {
+      const km = parseFloat(distance);
+      const power = parseInt(fiscalPower);
+      if (km > 0) {
+        const baseAmount = calculateKilometricAmount(km, power);
+        const amount = currentExpense.isRoundTrip ? baseAmount * 2 : baseAmount;
+        const trip = currentExpense.isRoundTrip ? 'A/R' : 'Aller';
+        setCurrentExpense(prev => ({
+          ...prev,
+          description: `${departure} → ${arrival} (${trip}, ${km}km, ${power}CV)`,
+          amount,
+        }));
+      }
+    }
+  }, [distance, fiscalPower, departure, arrival, currentExpense.isRoundTrip]);
+  
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    setCurrentExpense(prev => ({
+      ...prev,
+      justificatifs: [...(prev.justificatifs || []), ...files],
+    }));
+  }
+  
+  function addExpense() {
+    if (!currentExpense.description || !currentExpense.amount) {
+      alert('Veuillez remplir tous les champs');
+      return;
+    }
+    
+    const newExpense: ExpenseItem = {
+      id: Date.now().toString(),
+      type: currentExpense.type as ExpenseType,
+      description: currentExpense.description,
+      amount: currentExpense.amount,
+      date: currentExpense.date || new Date().toISOString().split('T')[0],
+      justificatifs: currentExpense.justificatifs || [],
+      departure: currentExpense.departure,
+      arrival: currentExpense.arrival,
+      isRoundTrip: currentExpense.isRoundTrip,
+      hotelName: currentExpense.hotelName,
+      hotelAddress: currentExpense.hotelAddress,
+      nights: currentExpense.nights,
+      isRecurring: currentExpense.isRecurring,
+    };
+    
+    setExpenses([...expenses, newExpense]);
+    setCurrentExpense({ type: 'CAR', date: new Date().toISOString().split('T')[0] });
+    setDeparture('');
+    setArrival('');
+    setDistance('');
+  }
+  
+  async function handleSubmit() {
+    if (!user || expenses.length === 0 || !motive) {
+      alert('Veuillez remplir tous les champs');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+      const { data: claim, error } = await supabase
+        .from('expense_claims')
+        .insert({ user_id: user.id, motive, total_amount: total, status: 'draft' })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      for (const expense of expenses) {
+        for (const file of expense.justificatifs) {
+          const path = `${claim.id}/${Date.now()}_${file.name}`;
+          await supabase.storage.from('justificatifs').upload(path, file);
+          await supabase.from('justificatifs').insert({
+            claim_id: claim.id,
+            filename: file.name,
+            storage_path: path,
+            file_type: file.type,
+            file_size: file.size,
+          });
+        }
+      }
+      
+      alert('✅ Demande créée !');
+      router.push('/claims');
+    } catch (error: any) {
+      alert('Erreur : ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <h1 className="text-3xl font-bold mb-4">📝 Nouvelle demande</h1>
+      
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <label className="block text-sm font-semibold mb-2">Motif *</label>
+        <input
+          type="text"
+          value={motive}
+          onChange={(e) => setMotive(e.target.value)}
+          placeholder="Ex: Déplacement formation..."
+          className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">➕ Ajouter une dépense</h2>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-semibold mb-2">Type</label>
+          <select
+            value={currentExpense.type}
+            onChange={(e) => setCurrentExpense({ ...currentExpense, type: e.target.value as ExpenseType })}
+            className="w-full px-4 py-2 border rounded-lg"
+          >
+            {EXPENSE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        
+        {currentExpense.type === 'CAR' && (
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+            <label className="flex items-center gap-2 mb-3">
+              <input
+                type="checkbox"
+                checked={currentExpense.isRoundTrip}
+                onChange={(e) => setCurrentExpense({ ...currentExpense, isRoundTrip: e.target.checked })}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-semibold">🔄 Aller-retour</span>
+            </label>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="relative">
+                <label className="block text-sm font-semibold mb-2">Départ *</label>
+                <input
+                  type="text"
+                  value={departure}
+                  onChange={(e) => { setDeparture(e.target.value); handleCitySearch(e.target.value, true); }}
+                  placeholder="Ville"
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                {showDepartureSuggestions && citySuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                    {citySuggestions.map((city, i) => (
+                      <div
+                        key={i}
+                        onClick={() => { setDeparture(city.name); setShowDepartureSuggestions(false); }}
+                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                      >
+                        {city.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="relative">
+                <label className="block text-sm font-semibold mb-2">Arrivée *</label>
+                <input
+                  type="text"
+                  value={arrival}
+                  onChange={(e) => { setArrival(e.target.value); handleCitySearch(e.target.value, false); }}
+                  placeholder="Ville"
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                {showArrivalSuggestions && citySuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                    {citySuggestions.map((city, i) => (
+                      <div
+                        key={i}
+                        onClick={() => { setArrival(city.name); setShowArrivalSuggestions(false); }}
+                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                      >
+                        {city.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">Distance (km) *</label>
+                <input
+                  type="number"
+                  value={distance}
+                  onChange={(e) => setDistance(e.target.value)}
+                  placeholder="100"
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Puissance (CV)</label>
+                <select
+                  value={fiscalPower}
+                  onChange={(e) => setFiscalPower(e.target.value)}
+                  className="w-full px-4 py-2 border rounded-lg"
+                >
+                  {[3,4,5,6,7].map(cv => <option key={cv} value={cv}>{cv} CV</option>)}
+                </select>
+              </div>
+            </div>
+            
+            {currentExpense.amount && (
+              <div className="mt-3 text-center text-lg font-semibold text-blue-600">
+                💰 Montant: {formatAmount(currentExpense.amount)}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {currentExpense.type !== 'CAR' && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">Description *</label>
+            <input
+              type="text"
+              value={currentExpense.description || ''}
+              onChange={(e) => setCurrentExpense({ ...currentExpense, description: e.target.value })}
+              placeholder="Description"
+              className="w-full px-4 py-2 border rounded-lg mb-4"
+            />
+            <label className="block text-sm font-semibold mb-2">Montant (€) *</label>
+            <input
+              type="number"
+              step="0.01"
+              value={currentExpense.amount || ''}
+              onChange={(e) => setCurrentExpense({ ...currentExpense, amount: parseFloat(e.target.value) })}
+              placeholder="25.50"
+              className="w-full px-4 py-2 border rounded-lg"
+            />
+          </div>
+        )}
+        
+        <div className="mb-4">
+          <label className="block text-sm font-semibold mb-2">Date</label>
+          <input
+            type="date"
+            value={currentExpense.date || ''}
+            onChange={(e) => setCurrentExpense({ ...currentExpense, date: e.target.value })}
+            className="w-full px-4 py-2 border rounded-lg"
+          />
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-semibold mb-2">📎 Justificatifs</label>
+          <input
+            type="file"
+            multiple
+            accept="image/*,application/pdf"
+            onChange={handleFileUpload}
+            className="w-full px-4 py-2 border rounded-lg"
+          />
+          {currentExpense.justificatifs && currentExpense.justificatifs.length > 0 && (
+            <div className="mt-2">
+              {currentExpense.justificatifs.map((f, i) => (
+                <div key={i} className="text-sm text-gray-600">{f.name}</div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <button onClick={addExpense} className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
+          ➕ Ajouter
+        </button>
+      </div>
+      
+      {expenses.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">📋 Récapitulatif ({expenses.length})</h2>
+          {expenses.map((e, i) => (
+            <div key={e.id} className="border-b pb-3 mb-3">
+              <div className="flex justify-between">
+                <div>
+                  <div className="font-semibold">{i+1}. {EXPENSE_TYPES.find(t => t.value === e.type)?.label}</div>
+                  <div className="text-sm text-gray-600">{e.description}</div>
+                  <div className="text-xs text-gray-500">{e.date}</div>
+                </div>
+                <div className="font-semibold text-blue-600">{formatAmount(e.amount)}</div>
+              </div>
+            </div>
+          ))}
+          <div className="mt-4 pt-4 border-t-2 flex justify-between text-xl font-bold">
+            <span>TOTAL</span>
+            <span className="text-green-600">{formatAmount(expenses.reduce((sum, e) => sum + e.amount, 0))}</span>
+          </div>
+        </div>
+      )}
+      
+      {expenses.length > 0 && (
+        <div className="flex gap-4">
+          <button
+            onClick={() => router.push('/claims')}
+            className="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50"
+          >
+            {loading ? '⏳ Envoi...' : '✅ Soumettre'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
