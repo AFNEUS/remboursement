@@ -1,105 +1,111 @@
 -- ================================================================
 -- CONFIGURATION UTILISATEURS AFNEUS
 -- ================================================================
--- À exécuter après 01_INIT_COMPLETE.sql
+-- Création des comptes des membres du Bureau National
 -- ================================================================
 
--- 1. MOHAMED = SUPER ADMIN (tous les droits)
+-- 1. MOHAMED DHIA OUNALLY = SUPER ADMIN
 UPDATE public.users
-SET 
-  role = 'ADMIN',
-  status = 'ADMIN',
-  first_name = 'Mohamed',
-  last_name = 'Dhia Ounally'
-WHERE email ILIKE '%mohamed%' AND email ILIKE '%afneus.org';
+SET role = 'ADMIN', status = 'ADMIN', first_name = 'Mohamed', last_name = 'Dhia Ounally'
+WHERE email = 'mohameddhia.ounally@afneus.org';
 
 INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT 
-  id, email, 'Mohamed', 'Dhia Ounally', 'ADMIN', 'ADMIN'
-FROM auth.users
-WHERE email ILIKE '%mohamed%' AND email ILIKE '%afneus.org'
-ON CONFLICT (id) DO UPDATE SET
-  role = 'ADMIN',
-  status = 'ADMIN',
-  first_name = 'Mohamed',
-  last_name = 'Dhia Ounally';
+SELECT id, 'mohameddhia.ounally@afneus.org', 'Mohamed', 'Dhia Ounally', 'ADMIN', 'ADMIN'
+FROM auth.users WHERE email = 'mohameddhia.ounally@afneus.org'
+ON CONFLICT (id) DO UPDATE SET role = 'ADMIN', status = 'ADMIN', first_name = 'Mohamed', last_name = 'Dhia Ounally';
 
--- 2. YANNIS = VALIDATOR + BN
+-- 2. YANNIS LOUMOUAMOU = VALIDATOR (Validateur)
 UPDATE public.users
-SET 
-  role = 'VALIDATOR',
-  status = 'BN',
-  first_name = 'Yannis',
-  last_name = 'Ferchichi'
-WHERE email ILIKE '%yannis%' AND email ILIKE '%afneus.org';
+SET role = 'VALIDATOR', status = 'BN', first_name = 'Yannis', last_name = 'Loumouamou'
+WHERE email = 'yannis.loumouamou@afneus.org';
 
 INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT 
-  id, email, 'Yannis', 'Ferchichi', 'VALIDATOR', 'BN'
-FROM auth.users
-WHERE email ILIKE '%yannis%' AND email ILIKE '%afneus.org'
-ON CONFLICT (id) DO UPDATE SET
-  role = 'VALIDATOR',
-  status = 'BN',
-  first_name = 'Yannis',
-  last_name = 'Ferchichi';
+SELECT id, 'yannis.loumouamou@afneus.org', 'Yannis', 'Loumouamou', 'VALIDATOR', 'BN'
+FROM auth.users WHERE email = 'yannis.loumouamou@afneus.org'
+ON CONFLICT (id) DO UPDATE SET role = 'VALIDATOR', status = 'BN', first_name = 'Yannis', last_name = 'Loumouamou';
 
--- 3. AUTRES MEMBRES BN (exemples - à personnaliser)
--- Président
-INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT id, email, 'Lucas', 'Martin', 'MEMBER', 'BN'
-FROM auth.users WHERE email = 'president@afneus.org'
-ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Lucas', last_name = 'Martin';
+-- 3. MEMBRES DU BUREAU NATIONAL
 
--- Vice-Président
+-- Agathe Bares
 INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT id, email, 'Emma', 'Bernard', 'MEMBER', 'BN'
-FROM auth.users WHERE email = 'vp@afneus.org'
-ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Emma', last_name = 'Bernard';
+SELECT id, 'agathe.bares@afneus.org', 'Agathe', 'Bares', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'agathe.bares@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Agathe', last_name = 'Bares';
 
--- Secrétaire Général
+-- Anne-Claire Beauvais
 INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT id, email, 'Thomas', 'Dubois', 'MEMBER', 'BN'
-FROM auth.users WHERE email = 'sg@afneus.org'
-ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Thomas', last_name = 'Dubois';
+SELECT id, 'anneclaire.beauvais@afneus.org', 'Anne-Claire', 'Beauvais', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'anneclaire.beauvais@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Anne-Claire', last_name = 'Beauvais';
 
--- Trésorier
+-- Corentin Chadirac
 INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT id, email, 'Léa', 'Moreau', 'TREASURER', 'BN'
-FROM auth.users WHERE email = 'tresorier@afneus.org'
-ON CONFLICT (id) DO UPDATE SET role = 'TREASURER', status = 'BN', first_name = 'Léa', last_name = 'Moreau';
+SELECT id, 'corentin.chadirac@afneus.org', 'Corentin', 'Chadirac', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'corentin.chadirac@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Corentin', last_name = 'Chadirac';
 
--- Responsable Com
+-- Emie Sanchez
 INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT id, email, 'Antoine', 'Laurent', 'MEMBER', 'BN'
-FROM auth.users WHERE email = 'com@afneus.org'
-ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Antoine', last_name = 'Laurent';
+SELECT id, 'emie.sanchez@afneus.org', 'Emie', 'Sanchez', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'emie.sanchez@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Emie', last_name = 'Sanchez';
 
--- Responsable Événements
+-- Eva Schindler
 INSERT INTO public.users (id, email, first_name, last_name, role, status)
-SELECT id, email, 'Chloé', 'Simon', 'MEMBER', 'BN'
-FROM auth.users WHERE email = 'events@afneus.org'
-ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Chloé', last_name = 'Simon';
+SELECT id, 'eva.schindler@afneus.org', 'Eva', 'Schindler', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'eva.schindler@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Eva', last_name = 'Schindler';
+
+-- Lucas De Perthuis
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'lucas.deperthuis@afneus.org', 'Lucas', 'De Perthuis', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'lucas.deperthuis@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Lucas', last_name = 'De Perthuis';
+
+-- Manon Soubeyrand
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'manon.soubeyrand@afneus.org', 'Manon', 'Soubeyrand', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'manon.soubeyrand@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Manon', last_name = 'Soubeyrand';
+
+-- Rebecca Roux
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'rebecca.roux@afneus.org', 'Rebecca', 'Roux', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'rebecca.roux@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Rebecca', last_name = 'Roux';
+
+-- Salomé Lance-Richardot
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'salome.lance-richardot@afneus.org', 'Salomé', 'Lance-Richardot', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'salome.lance-richardot@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Salomé', last_name = 'Lance-Richardot';
+
+-- Thomas Dujak
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'thomas.dujak@afneus.org', 'Thomas', 'Dujak', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'thomas.dujak@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Thomas', last_name = 'Dujak';
 
 -- ================================================================
 -- VÉRIFICATION
 -- ================================================================
 SELECT 
-  email,
-  first_name || ' ' || last_name as nom_complet,
+  first_name || ' ' || last_name as "Nom Complet",
+  email as "Email",
   CASE 
     WHEN role = 'ADMIN' THEN '👑 Administrateur'
     WHEN role = 'TREASURER' THEN '💰 Trésorier'
     WHEN role = 'VALIDATOR' THEN '✅ Validateur'
     ELSE '👤 Membre'
-  END as role_label,
+  END as "Rôle",
   CASE
     WHEN status = 'ADMIN' THEN '⚡ Super Admin'
     WHEN status = 'BN' THEN '🏛️ Bureau National'
-    ELSE '📝 Membre'
-  END as status_label,
-  created_at
+    ELSE '📝 Membre Simple'
+  END as "Statut",
+  created_at as "Créé le"
 FROM public.users
+WHERE email LIKE '%@afneus.org'
 ORDER BY 
   CASE role
     WHEN 'ADMIN' THEN 1
@@ -107,4 +113,4 @@ ORDER BY
     WHEN 'VALIDATOR' THEN 3
     ELSE 4
   END,
-  email;
+  last_name;
