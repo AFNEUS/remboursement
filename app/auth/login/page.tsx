@@ -47,10 +47,7 @@ function AuthPageContent() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // ⚠️ IMPORTANT: Rediriger vers /auth/callback de ton app
-          // Supabase va d'abord aller sur sa propre URL /auth/v1/callback
-          // puis rediriger vers cette URL avec le code
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback-handler`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
