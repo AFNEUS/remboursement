@@ -95,12 +95,20 @@ export default function CallbackHandler() {
         addLog('📝 Création profil...');
         setStatus('Création du profil...');
         
+        // Extraire prénom/nom depuis Google ou email
+        const fullName = user.user_metadata?.full_name || user.email!.split('@')[0];
+        const nameParts = fullName.split(' ');
+        const firstName = nameParts[0] || 'Prénom';
+        const lastName = nameParts.slice(1).join(' ') || 'Nom';
+        
         // @ts-ignore
         const { error: insertError } = await supabase.from('users').insert({
           id: user.id,
           email: user.email!,
-          full_name: user.user_metadata?.full_name || user.email!.split('@')[0],
-          role: 'USER',
+          first_name: firstName,
+          last_name: lastName,
+          role: 'MEMBER',
+          status: 'MEMBER',
         });
 
         if (insertError) {
