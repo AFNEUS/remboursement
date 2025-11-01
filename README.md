@@ -1,6 +1,6 @@
 # 🎓 AFNEUS - Plateforme de Remboursement
 
-Système complet de gestion des remboursements pour l'Association Fédérale Nationale des Étudiants Universitaires en Santé.
+Système complet de gestion des remboursements pour l'Association fédérative nationale des étudiants universitaires scientifiques.
 
 ## 🚀 Stack Technique
 
