@@ -21,6 +21,7 @@ END $$;
 -- Supprimer les fonctions
 DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 DROP FUNCTION IF EXISTS public.update_user_profile(TEXT, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.update_user_profile(TEXT, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS public.create_user_profile(UUID, TEXT, TEXT, TEXT) CASCADE;
 
 -- Supprimer les vues
