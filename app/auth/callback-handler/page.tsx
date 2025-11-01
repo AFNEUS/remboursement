@@ -6,93 +6,139 @@ import { supabase } from '@/lib/supabase/client';
 
 export default function CallbackHandler() {
   const router = useRouter();
-  const [status, setStatus] = useState('🔄 Connexion en cours...');
+  const [status, setStatus] = useState('Démarrage...');
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const addLog = (msg: string) => {
+    console.log(msg);
+    setLogs(prev => [...prev, msg]);
+  };
 
   useEffect(() => {
+    addLog('START CallbackHandler');
+    addLog('URL: ' + window.location.href);
+    addLog('Hash: ' + window.location.hash);
     handleCallback();
   }, []);
 
   async function handleCallback() {
     try {
-      setStatus('🔄 Récupération de la session...');
+      setStatus('Lecture session...');
+      addLog('1. Appel getSession()...');
       
-      // getSession() lit automatiquement le hash fragment
-      const { data: { session }, error } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
+      
+      addLog('2. getSession() terminé');
+      addLog('Session: ' + (data.session ? 'EXISTS' : 'NULL'));
+      addLog('Error: ' + (error ? error.message : 'none'));
 
       if (error) {
-        console.error('❌ Erreur session:', error);
-        setStatus('❌ Erreur : ' + error.message);
-        setTimeout(() => router.push('/auth/login'), 2000);
+        addLog('ERREUR SESSION: ' + error.message);
+        setStatus('Erreur: ' + error.message);
         return;
       }
 
-      if (!session || !session.user) {
-        console.error('❌ Pas de session');
-        setStatus('❌ Pas de session trouvée');
-        setTimeout(() => router.push('/auth/login'), 2000);
+      if (!data.session) {
+        addLog('PAS DE SESSION - Essai onAuthStateChange...');
+        setStatus('Pas de session - Tentative recuperation...');
+        
+        supabase.auth.onAuthStateChange((event, session) => {
+          addLog('AuthStateChange Event: ' + event);
+          if (session) {
+            addLog('Session recuperee via event');
+            createProfileAndRedirect(session);
+          }
+        });
+        
+        setTimeout(() => {
+          addLog('Timeout - redirect login');
+          router.push('/auth/login?error=Pas+de+session');
+        }, 5000);
         return;
       }
 
-      console.log('✅ Session OK:', session.user.email);
-      setStatus('✅ Session créée pour ' + session.user.email);
+      addLog('SESSION OK: ' + data.session.user.email);
+      setStatus('Session: ' + data.session.user.email);
+      
+      await createProfileAndRedirect(data.session);
 
-      // Vérifier/créer le profil
-      setStatus('🔍 Vérification du profil...');
-      const { data: profile } = await supabase
+    } catch (err: any) {
+      addLog('EXCEPTION: ' + err.message);
+      setStatus('Exception: ' + err.message);
+    }
+  }
+
+  async function createProfileAndRedirect(session: any) {
+    try {
+      addLog('4. Check profil...');
+      setStatus('Verification profil...');
+
+      const { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', session.user.id)
         .single();
 
+      addLog('Profile: ' + (profile ? 'EXISTS' : 'NULL'));
+
       if (!profile) {
-        console.log('⚠️ Profil non trouvé, création...');
-        setStatus('⚙️ Création du profil...');
-        
+        addLog('5. Creation profil...');
+        setStatus('Creation profil...');
+
         const email = session.user.email || '';
         const role = email === 'mohameddhia.ounally@afneus.org' ? 'ADMIN' : 'MEMBER';
         
+        addLog('Email: ' + email);
+        addLog('Role: ' + role);
+
         // @ts-ignore
         const { error: insertError } = await supabase.from('users').insert({
           id: session.user.id,
           email,
-          first_name: session.user.user_metadata?.first_name || session.user.user_metadata?.name?.split(' ')[0] || '',
-          last_name: session.user.user_metadata?.last_name || session.user.user_metadata?.name?.split(' ').slice(1).join(' ') || '',
+          first_name: session.user.user_metadata?.name?.split(' ')[0] || '',
+          last_name: session.user.user_metadata?.name?.split(' ').slice(1).join(' ') || '',
           role,
           status: 'ACTIVE',
         });
 
         if (insertError) {
-          console.error('❌ Erreur création profil:', insertError);
+          addLog('ERREUR INSERT: ' + insertError.message);
         } else {
-          console.log('✅ Profil créé avec role:', role);
+          addLog('Profil cree');
         }
       } else {
-        // @ts-ignore
-        console.log('✅ Profil existant:', profile.email, profile.role);
+        addLog('Profil existe');
       }
 
-      setStatus('✅ Redirection...');
+      addLog('6. Redirection /dashboard');
+      setStatus('Redirection...');
       
-      // Redirection immédiate
-      router.push('/dashboard');
-      router.refresh();
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1000);
 
-    } catch (error: any) {
-      console.error('❌ Exception:', error);
-      setStatus('❌ Erreur : ' + error.message);
-      setTimeout(() => router.push('/auth/login'), 3000);
+    } catch (err: any) {
+      addLog('EXCEPTION createProfile: ' + err.message);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full text-center">
-        <div className="mb-6">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
+    <div className="min-h-screen bg-gray-900 text-white p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-4">Debug OAuth</h1>
+        <div className="bg-gray-800 rounded-lg p-4 mb-4">
+          <p className="text-xl">{status}</p>
         </div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">AFNEUS Remboursement</h2>
-        <p className="text-gray-600 text-lg">{status}</p>
-        <p className="text-xs text-gray-400 mt-4">Ouvrez la console (F12) pour voir les logs</p>
+        <div className="bg-black rounded-lg p-4 font-mono text-sm">
+          <div className="text-green-400 mb-2">Logs:</div>
+          {logs.map((log, i) => (
+            <div key={i} className="text-gray-300 mb-1">{log}</div>
+          ))}
+        </div>
+        <div className="mt-4 text-sm text-gray-400">
+          <p>URL: {typeof window !== 'undefined' ? window.location.href : 'loading...'}</p>
+          <p>Hash: {typeof window !== 'undefined' ? window.location.hash : 'loading...'}</p>
+        </div>
       </div>
     </div>
   );
