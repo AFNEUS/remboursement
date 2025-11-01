@@ -7,87 +7,110 @@ import { supabase } from '@/lib/supabase/client';
 export default function CallbackHandler() {
   const router = useRouter();
   const [status, setStatus] = useState('Connexion en cours...');
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const addLog = (msg: string) => {
+    console.log(msg);
+    setLogs(prev => [...prev, msg]);
+  };
 
   useEffect(() => {
     async function handleCallback() {
       try {
-        // ATTENDRE que Supabase gère automatiquement le hash
-        // Il détecte le #access_token et crée la session
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        addLog('🔄 Démarrage callback handler');
         
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Supabase détecte automatiquement le hash (#access_token)
+        // On attend qu'il finisse de traiter
+        addLog('⏳ Attente traitement Supabase (2s)...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        addLog('🔍 Vérification session...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (error) {
-          console.error('Session error:', error);
+        if (sessionError) {
+          addLog(`❌ Erreur session: ${sessionError.message}`);
           setStatus('Erreur de connexion');
           setTimeout(() => router.push('/auth/login'), 2000);
           return;
         }
 
         if (!session) {
-          console.log('Pas de session, attente...');
+          addLog('⚠️ Pas de session immédiate, attente event...');
           setStatus('Récupération de la session...');
           
-          // Attendre l'event onAuthStateChange
+          // Écouter l'event SIGNED_IN
           const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, newSession: any) => {
-            console.log('Auth event:', event);
+            addLog(`📡 Event: ${event}`);
             
-            if (newSession && event === 'SIGNED_IN') {
-              console.log('Session créée:', newSession.user.email);
+            if (event === 'SIGNED_IN' && newSession) {
+              addLog(`✅ Session créée: ${newSession.user.email}`);
               
-              // Vérifier/créer le profil
-              const { data: profile } = await supabase
-                .from('users')
-                .select('*')
-                .eq('id', newSession.user.id)
-                .single();
-
-              if (!profile) {
-                // @ts-ignore
-                await supabase.from('users').insert({
-                  id: newSession.user.id,
-                  email: newSession.user.email!,
-                  full_name: newSession.user.user_metadata?.full_name || newSession.user.email!.split('@')[0],
-                  role: 'USER',
-                });
-              }
-
+              // Créer le profil si nécessaire
+              await ensureProfile(newSession.user);
+              
               subscription.unsubscribe();
+              addLog('🚀 Redirection dashboard...');
               router.push('/dashboard');
             }
           });
           
+          // Timeout si rien après 10s
+          setTimeout(() => {
+            addLog('⏱️ Timeout - pas de session');
+            subscription.unsubscribe();
+            router.push('/auth/login');
+          }, 10000);
+          
           return;
         }
 
-        // Session existe déjà
-        console.log('Session trouvée:', session.user.email);
+        // Session existe immédiatement
+        addLog(`✅ Session trouvée: ${session.user.email}`);
         
-        // Vérifier/créer le profil
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (!profile) {
-          setStatus('Création du profil...');
-          // @ts-ignore
-          await supabase.from('users').insert({
-            id: session.user.id,
-            email: session.user.email!,
-            full_name: session.user.user_metadata?.full_name || session.user.email!.split('@')[0],
-            role: 'USER',
-          });
-        }
-
+        // Créer le profil si nécessaire
+        await ensureProfile(session.user);
+        
+        addLog('🚀 Redirection dashboard...');
         setStatus('Connexion réussie !');
         router.push('/dashboard');
 
       } catch (err: any) {
+        addLog(`💥 Erreur: ${err.message}`);
         console.error('Callback error:', err);
         setStatus('Erreur: ' + err.message);
         setTimeout(() => router.push('/auth/login'), 2000);
+      }
+    }
+
+    async function ensureProfile(user: any) {
+      addLog('👤 Vérification profil...');
+      
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile) {
+        addLog('📝 Création profil...');
+        setStatus('Création du profil...');
+        
+        // @ts-ignore
+        const { error: insertError } = await supabase.from('users').insert({
+          id: user.id,
+          email: user.email!,
+          full_name: user.user_metadata?.full_name || user.email!.split('@')[0],
+          role: 'USER',
+        });
+
+        if (insertError) {
+          addLog(`❌ Erreur création profil: ${insertError.message}`);
+          throw insertError;
+        }
+        
+        addLog('✅ Profil créé');
+      } else {
+        addLog('✅ Profil existe déjà');
       }
     }
 
@@ -96,9 +119,19 @@ export default function CallbackHandler() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-lg text-gray-700">{status}</p>
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-700 font-medium">{status}</p>
+        </div>
+        
+        {logs.length > 0 && (
+          <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-xs max-h-96 overflow-y-auto">
+            {logs.map((log, i) => (
+              <div key={i} className="mb-1">{log}</div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
