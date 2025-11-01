@@ -23,6 +23,10 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
   const error_description = requestUrl.searchParams.get('error_description');
+  
+  // Vérifier aussi les tokens dans le hash (mode Implicit Flow - fallback)
+  const hash = requestUrl.hash;
+  const hasAccessToken = hash && hash.includes('access_token=');
 
   // ═══════════════════════════════════════════════════════════
   // 1️⃣ VALIDATION : Erreurs OAuth
@@ -35,13 +39,26 @@ export async function GET(request: Request) {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // 2️⃣ VALIDATION : Code OAuth présent
+  // 2️⃣ VALIDATION : Code OAuth ou Token présent
   // ═══════════════════════════════════════════════════════════
-  if (!code) {
-    console.error('❌ No OAuth code');
+  if (!code && !hasAccessToken) {
+    console.error('❌ No OAuth code or token');
+    console.log('URL:', requestUrl.href);
     return NextResponse.redirect(
       new URL('/auth/login?error=Code+manquant', requestUrl.origin)
     );
+  }
+  
+  // ⚠️ Si on reçoit un token dans le hash au lieu d'un code, 
+  // c'est que Google OAuth est mal configuré (Implicit Flow au lieu de Code Flow)
+  if (!code && hasAccessToken) {
+    console.warn('⚠️ Received access_token in hash instead of code - OAuth misconfigured!');
+    console.warn('👉 Fix: Supabase Dashboard → Auth → Providers → Google → Check redirect URL');
+    console.warn('👉 Should be: https://[PROJECT].supabase.co/auth/v1/callback');
+    
+    // On redirige quand même vers le dashboard avec le token
+    // Le navigateur va gérer la session via le hash fragment
+    return NextResponse.redirect(new URL('/dashboard', requestUrl.origin));
   }
 
   try {
