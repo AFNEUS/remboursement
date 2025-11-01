@@ -48,10 +48,7 @@ function AuthPageContent() {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth/callback-handler`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
+          skipBrowserRedirect: false,
         },
       });
 
