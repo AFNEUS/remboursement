@@ -37,6 +37,23 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Gestion Utilisateurs */}
+        <div 
+          onClick={() => router.push('/admin/users')}
+          className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-6 cursor-pointer hover:scale-105 transition-transform text-white"
+        >
+          <div className="text-4xl mb-4">👥</div>
+          <h2 className="text-2xl font-bold mb-2">Gestion des Utilisateurs</h2>
+          <p className="text-indigo-100 mb-4">
+            Gérez les rôles et statuts de tous les membres AFNEUS
+          </p>
+          <ul className="text-sm text-indigo-100 space-y-1">
+            <li>✓ Attribution des rôles (Admin, Validateur, Trésorier)</li>
+            <li>✓ Statuts BN / Membre</li>
+            <li>✓ Vue complète des droits</li>
+          </ul>
+        </div>
+
         {/* Créer Demande Admin */}
         <div 
           onClick={() => router.push('/admin/claims')}

@@ -170,9 +170,10 @@ GRANT EXECUTE ON FUNCTION public.create_user_profile TO anon;
 
 -- Fonction pour mettre à jour le profil
 CREATE OR REPLACE FUNCTION public.update_user_profile(
-  new_first_name TEXT,
-  new_last_name TEXT,
-  new_phone TEXT DEFAULT NULL
+  p_first_name TEXT DEFAULT NULL,
+  p_last_name TEXT DEFAULT NULL,
+  p_phone TEXT DEFAULT NULL,
+  p_iban TEXT DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -182,9 +183,10 @@ AS $$
 BEGIN
   UPDATE public.users
   SET 
-    first_name = new_first_name,
-    last_name = new_last_name,
-    phone = COALESCE(new_phone, phone),
+    first_name = COALESCE(p_first_name, first_name),
+    last_name = COALESCE(p_last_name, last_name),
+    phone = COALESCE(p_phone, phone),
+    iban = COALESCE(p_iban, iban),
     updated_at = NOW()
   WHERE id = auth.uid();
 END;
@@ -395,6 +397,73 @@ VALUES (
 INSERT INTO public.event_baremes (event_id)
 SELECT id FROM public.events WHERE name = 'Événement Général'
 ON CONFLICT DO NOTHING;
+
+-- ================================================================
+-- UTILISATEURS AFNEUS (Bureau National)
+-- ================================================================
+
+-- Mohamed Dhia Ounally = SUPER ADMIN
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'mohameddhia.ounally@afneus.org', 'Mohamed Dhia', 'Ounally', 'ADMIN', 'ADMIN'
+FROM auth.users WHERE email = 'mohameddhia.ounally@afneus.org'
+ON CONFLICT (id) DO UPDATE SET role = 'ADMIN', status = 'ADMIN', first_name = 'Mohamed Dhia', last_name = 'Ounally';
+
+-- Yannis Loumouamou = VALIDATOR
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'yannis.loumouamou@afneus.org', 'Yannis', 'Loumouamou', 'VALIDATOR', 'BN'
+FROM auth.users WHERE email = 'yannis.loumouamou@afneus.org'
+ON CONFLICT (id) DO UPDATE SET role = 'VALIDATOR', status = 'BN', first_name = 'Yannis', last_name = 'Loumouamou';
+
+-- Membres BN
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'agathe.bares@afneus.org', 'Agathe', 'Bares', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'agathe.bares@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Agathe', last_name = 'Bares';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'anneclaire.beauvais@afneus.org', 'Anne-Claire', 'Beauvais', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'anneclaire.beauvais@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Anne-Claire', last_name = 'Beauvais';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'corentin.chadirac@afneus.org', 'Corentin', 'Chadirac', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'corentin.chadirac@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Corentin', last_name = 'Chadirac';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'emie.sanchez@afneus.org', 'Emie', 'Sanchez', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'emie.sanchez@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Emie', last_name = 'Sanchez';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'eva.schindler@afneus.org', 'Eva', 'Schindler', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'eva.schindler@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Eva', last_name = 'Schindler';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'lucas.deperthuis@afneus.org', 'Lucas', 'De Perthuis', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'lucas.deperthuis@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Lucas', last_name = 'De Perthuis';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'manon.soubeyrand@afneus.org', 'Manon', 'Soubeyrand', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'manon.soubeyrand@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Manon', last_name = 'Soubeyrand';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'rebecca.roux@afneus.org', 'Rebecca', 'Roux', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'rebecca.roux@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Rebecca', last_name = 'Roux';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'salome.lance-richardot@afneus.org', 'Salomé', 'Lance-Richardot', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'salome.lance-richardot@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Salomé', last_name = 'Lance-Richardot';
+
+INSERT INTO public.users (id, email, first_name, last_name, role, status)
+SELECT id, 'thomas.dujak@afneus.org', 'Thomas', 'Dujak', 'MEMBER', 'BN'
+FROM auth.users WHERE email = 'thomas.dujak@afneus.org'
+ON CONFLICT (id) DO UPDATE SET status = 'BN', first_name = 'Thomas', last_name = 'Dujak';
 
 -- ================================================================
 -- INITIALISATION TERMINÉE ✅

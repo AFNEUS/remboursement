@@ -121,11 +121,43 @@ export default function ProfilePage() {
     'MEMBER': '👤 Membre',
   };
 
+  const STATUS_LABELS: Record<string, string> = {
+    'ADMIN': '🔴 Super Admin',
+    'BN': '⭐ Bureau National',
+    'MEMBER': '👥 Membre',
+  };
+
+  const getUserRole = () => {
+    if (profile?.role) return profile.role;
+    if ((user as any)?.role) return (user as any).role;
+    return 'MEMBER';
+  };
+
+  const getUserStatus = () => {
+    if (profile?.status) return profile.status;
+    if ((user as any)?.status) return (user as any).status;
+    return 'MEMBER';
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">👤 Mon profil</h1>
         <p className="text-gray-600">Gérez vos informations personnelles</p>
+      </div>
+
+      {/* Badge Rôle + Statut */}
+      <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg shadow-lg p-6 mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm opacity-90 mb-1">Votre rôle</div>
+            <div className="text-2xl font-bold">{ROLE_LABELS[getUserRole()] || '👤 Membre'}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm opacity-90 mb-1">Statut</div>
+            <div className="text-2xl font-bold">{STATUS_LABELS[getUserStatus()] || '👥 Membre'}</div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
