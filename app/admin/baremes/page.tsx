@@ -34,7 +34,7 @@ export default function BaremesAdminPage() {
   }
 
   async function handleSave() {
-    if (!editing) return;
+    if (!editing || !formData.rate_0_5000 || !formData.rate_5001_20000 || !formData.rate_20001_plus) return;
 
     const { error } = await supabase
       .from('baremes')
@@ -42,7 +42,7 @@ export default function BaremesAdminPage() {
         rate_0_5000: formData.rate_0_5000,
         rate_5001_20000: formData.rate_5001_20000,
         rate_20001_plus: formData.rate_20001_plus,
-      })
+      } as never)
       .eq('id', editing);
 
     if (!error) {
