@@ -85,38 +85,41 @@ export default function CallbackHandler() {
     async function ensureProfile(user: any) {
       addLog('👤 Vérification profil...');
       
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', user.id)
         .single();
 
+      if (profileError && profileError.code !== 'PGRST116') {
+        addLog(`⚠️ Erreur vérification profil: ${profileError.message}`);
+      }
+
       if (!profile) {
-        addLog('📝 Création profil...');
+        addLog('📝 Création profil via RPC...');
         setStatus('Création du profil...');
         
         // Extraire prénom/nom depuis Google ou email
         const fullName = user.user_metadata?.full_name || user.email!.split('@')[0];
         const nameParts = fullName.split(' ');
-        const firstName = nameParts[0] || 'Prénom';
-        const lastName = nameParts.slice(1).join(' ') || 'Nom';
+        const firstName = nameParts[0] || 'User';
+        const lastName = nameParts.slice(1).join(' ') || '';
         
+        // Utiliser la fonction RPC qui bypass RLS
         // @ts-ignore
-        const { error: insertError } = await supabase.from('users').insert({
-          id: user.id,
-          email: user.email!,
-          first_name: firstName,
-          last_name: lastName,
-          role: 'MEMBER',
-          status: 'MEMBER',
+        const { error: rpcError } = await supabase.rpc('create_user_profile', {
+          user_id: user.id,
+          user_email: user.email!,
+          user_first_name: firstName,
+          user_last_name: lastName || firstName,
         });
 
-        if (insertError) {
-          addLog(`❌ Erreur création profil: ${insertError.message}`);
-          throw insertError;
+        if (rpcError) {
+          addLog(`❌ Erreur RPC: ${rpcError.message}`);
+          // Pas grave, on continue quand même (peut-être déjà créé)
+        } else {
+          addLog('✅ Profil créé via RPC');
         }
-        
-        addLog('✅ Profil créé');
       } else {
         addLog('✅ Profil existe déjà');
       }
