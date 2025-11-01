@@ -6,6 +6,9 @@ import { create } from 'xmlbuilder2';
 import { format } from 'date-fns';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// Force dynamic rendering (uses cookies for auth)
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/export/sepa
  * Générer un fichier SEPA XML pain.001.001.03 pour les paiements

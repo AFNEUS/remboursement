@@ -5,6 +5,9 @@ import { calculateReimbursableAmount, validateIBAN, detectDuplicates, generateCl
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
+// Force dynamic rendering (uses cookies for auth)
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/claims/create
  * Créer une nouvelle demande de remboursement
