@@ -41,22 +41,51 @@ export default function DashboardPage() {
   }, [user]);
 
   async function loadUser() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsedUser = JSON.parse(testUser);
-      setUser(parsedUser);
-      setLoading(false);
-      return;
-    }
+    try {
+      const testUser = localStorage.getItem('test_user');
+      if (testUser) {
+        const parsedUser = JSON.parse(testUser);
+        setUser(parsedUser);
+        setLoading(false);
+        return;
+      }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      alert('❌ Accès refusé. Vous devez être connecté pour voir le dashboard.');
-      router.push('/');
-      return;
+      console.log('🔍 Dashboard - Vérification session...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('❌ Erreur session:', sessionError);
+        router.push('/auth/login?error=Session+invalide');
+        return;
+      }
+
+      if (!session) {
+        console.log('⚠️ Pas de session, redirection login');
+        router.push('/auth/login');
+        return;
+      }
+
+      console.log('✅ Session active:', session.user.email);
+
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('❌ Utilisateur non trouvé dans public.users');
+        router.push('/auth/login?error=Profil+non+trouvé');
+        return;
+      }
+
+      console.log('✅ Profil chargé:', userData.email, userData.role);
+      setUser(userData);
+      setLoading(false);
+    } catch (error) {
+      console.error('❌ Exception loadUser:', error);
+      router.push('/auth/login');
     }
-    setUser(user);
-    setLoading(false);
   }
 
   async function loadDashboardData() {

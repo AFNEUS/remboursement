@@ -61,9 +61,12 @@ export async function GET(request: Request) {
     }
 
     const user = sessionData.user;
+    const session = sessionData.session;
     console.log('✅ Session créée !');
     console.log('👤 User ID:', user.id);
     console.log('📧 Email:', user.email);
+    console.log('🔑 Access Token présent:', !!session.access_token);
+    console.log('🔑 Refresh Token présent:', !!session.refresh_token);
     
     // ✨ CRÉER L'UTILISATEUR DANS public.users S'IL N'EXISTE PAS
     console.log('🔍 Vérification existence utilisateur...');
