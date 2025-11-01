@@ -1,6 +1,11 @@
+// @ts-nocheck
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -60,9 +65,49 @@ export async function GET(request: Request) {
     console.log('👤 User ID:', user.id);
     console.log('📧 Email:', user.email);
     
-    // Attendre que le trigger crée le profil
-    console.log('⏳ Attente création profil (2 secondes)...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // ✨ CRÉER L'UTILISATEUR DANS public.users S'IL N'EXISTE PAS
+    console.log('🔍 Vérification existence utilisateur...');
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', user.id)
+      .single();
+    
+    if (!existingUser) {
+      console.log('⚠️ Utilisateur non trouvé dans public.users, création...');
+      
+      // Déterminer le rôle et le statut
+      const email = user.email || '';
+      const status = email.includes('@afneus.org') ? 'BN' : 'MEMBER';
+      const role = 
+        email === 'mohameddhia.ounally@afneus.org' ? 'ADMIN' :
+        email === 'yannis.loumouamou@afneus.org' ? 'TREASURER' :
+        'MEMBER';
+      
+      // Créer l'utilisateur avec l'admin client
+      // @ts-ignore - Supabase type generation issue
+      const { error: createError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          id: user.id,
+          email: user.email,
+          first_name: user.user_metadata?.given_name || user.email?.split('@')[0] || 'Utilisateur',
+          last_name: user.user_metadata?.family_name || '',
+          status: status,
+          role: role,
+        });
+      
+      if (createError) {
+        console.error('❌ Erreur création utilisateur:', createError);
+      } else {
+        console.log('✅ Utilisateur créé avec succès !');
+        console.log('   👤 Nom:', user.user_metadata?.given_name, user.user_metadata?.family_name);
+        console.log('   🎭 Rôle:', role);
+        console.log('   📊 Status:', status);
+      }
+    } else {
+      console.log('✅ Utilisateur existe déjà dans public.users');
+    }
     
     // Récupérer le profil
     console.log('🔍 Récupération profil...');
