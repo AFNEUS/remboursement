@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { searchCities, calculateDistance } from '@/lib/cities-france';
 import { calculateKilometricAmount, formatAmount } from '@/lib/calculations';
+import TrainJourneyForm from '@/components/TrainJourneyForm';
 
 type ExpenseType = 'CAR' | 'TRAIN' | 'BUS' | 'MEAL' | 'HOTEL' | 'OTHER';
 
@@ -591,34 +592,32 @@ export default function NewClaimPage() {
         {/* TRAIN */}
         {currentExpense.type === 'TRAIN' && (
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold mb-3 text-purple-900">🚄 Informations du trajet</h3>
+            <h3 className="font-semibold mb-3 text-purple-900">🚄 Informations du trajet train</h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2">Gare de départ *</label>
-                <input
-                  type="text"
-                  value={departure}
-                  onChange={(e) => setDeparture(e.target.value)}
-                  placeholder="Ex: Paris Gare de Lyon"
-                  className="w-full px-4 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-2">Gare d'arrivée *</label>
-                <input
-                  type="text"
-                  value={arrival}
-                  onChange={(e) => setArrival(e.target.value)}
-                  placeholder="Ex: Lyon Part-Dieu"
-                  className="w-full px-4 py-2 border rounded-lg"
-                />
-              </div>
-            </div>
+            <TrainJourneyForm
+              initialDate={currentExpense.date}
+              onJourneyChange={(segments, isRoundTrip) => {
+                // Calculer le montant total et construire la description
+                const totalPrice = segments.reduce((sum, seg) => sum + (seg.price || 0), 0);
+                const description = segments.map((seg, i) => 
+                  `${seg.from} → ${seg.to} (${seg.date})`
+                ).join(' | ');
+                
+                setCurrentExpense({
+                  ...currentExpense,
+                  departure: segments[0]?.from || '',
+                  arrival: segments[segments.length - 1]?.to || '',
+                  isRoundTrip,
+                  amount: totalPrice || currentExpense.amount,
+                  description: description || `Train ${segments[0]?.from} → ${segments[segments.length - 1]?.to}`,
+                  // Stocker les segments pour envoi ultérieur
+                  trainSegments: segments,
+                });
+              }}
+            />
             
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Montant du billet *</label>
+            <div className="mt-4">
+              <label className="block text-sm font-semibold mb-2">Montant total (€) *</label>
               <input
                 type="number"
                 step="0.01"
@@ -629,13 +628,12 @@ export default function NewClaimPage() {
                   setCurrentExpense({ 
                     ...currentExpense, 
                     amount,
-                    description: `Train ${departure} → ${arrival}`,
                   });
                   if (amount > maxTrain) {
                     alert(`⚠️ Le montant dépasse le plafond de ${formatAmount(maxTrain)}`);
                   }
                 }}
-                placeholder="Prix réel du billet"
+                placeholder="Prix total des billets"
                 className="w-full px-4 py-2 border rounded-lg"
               />
               {tarifs['TRAIN'] && (
@@ -645,14 +643,22 @@ export default function NewClaimPage() {
               )}
             </div>
             
-            <div>
-              <label className="block text-sm font-semibold mb-2">Billet de train (PDF ou photo) *</label>
+            <div className="mt-4">
+              <label className="block text-sm font-semibold mb-2">Billets de train (PDF ou photos) *</label>
               <input
                 type="file"
                 onChange={handleFileUpload}
+                multiple
                 className="w-full"
                 accept="image/*,.pdf"
               />
+              {currentExpense.justificatifs && currentExpense.justificatifs.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {currentExpense.justificatifs.map((file, i) => (
+                    <p key={i} className="text-xs text-green-600">✓ {file.name}</p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
