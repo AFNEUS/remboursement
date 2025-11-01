@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import Image from 'next/image';
 
 export default function Navigation() {
   const router = useRouter();
@@ -82,9 +83,13 @@ export default function Navigation() {
             onClick={() => router.push('/')}
             className="flex items-center gap-2 font-bold text-xl hover:text-blue-100 transition"
           >
-            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-sm backdrop-blur">
-              AF
-            </div>
+            <Image 
+              src="/logo-afneus.png" 
+              alt="AFNEUS Logo" 
+              width={40} 
+              height={40}
+              className="rounded-lg bg-white/20 p-1"
+            />
             <span className="hidden sm:inline">AFNEUS</span>
           </button>
 

@@ -3,84 +3,78 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import Image from 'next/image';
 
 export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     checkUser();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        checkUser();
+      } else {
+        setUser(null);
+        setUserProfile(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   async function checkUser() {
-    // Vérifier le mode test
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsed = JSON.parse(testUser);
-      setUser(parsed);
-      setUserRole(parsed.role);
-      setLoading(false);
-      return;
-    }
+    try {
+      setLoading(true);
+      
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        setLoading(false);
+        return;
+      }
 
-    // Vérifier l'authentification Supabase
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      // Récupérer le rôle depuis la table users
-      const { data: userData } = await supabase
+      setUser(user);
+      
+      const { data: userData, error: profileError } = await supabase
         .from('users')
-        .select('role, first_name, last_name')
+        .select('*')
         .eq('id', user.id)
         .single();
 
-      if (userData) {
-        setUser({ ...user, ...(userData as any) });
-        setUserRole((userData as any).role);
+      if (!profileError && userData) {
+        setUserProfile(userData);
       }
+    } catch (error) {
+      console.error('Erreur checkUser:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
-  // Vérifier si l'utilisateur peut accéder au dashboard
-  const canAccessDashboard = userRole && ['ADMIN', 'TREASURER', 'VALIDATOR'].includes(userRole);
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
+    setUserProfile(null);
+    router.push('/');
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-16">
-        {/* Header avec connexion */}
-        <div className="flex justify-end mb-8">
-          {!loading && (
-            user ? (
-              <div className="flex items-center gap-4">
-                <span className="text-gray-700">
-                  👋 Bonjour <strong>{user.first_name || user.email?.split('@')[0]}</strong>
-                </span>
-                <button
-                  onClick={() => router.push('/profile')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  👤 Mon Profil
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => router.push('/auth/login')}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition shadow-lg"
-              >
-                🔐 Se connecter
-              </button>
-            )
-          )}
-        </div>
-
         <div className="text-center mb-16">
-          <div className="inline-block p-4 bg-blue-600 rounded-2xl mb-6">
-            <h1 className="text-5xl md:text-6xl font-bold text-white">
-              AFNEUS
-            </h1>
+          <div className="inline-block mb-6">
+            <Image 
+              src="/logo-afneus.png" 
+              alt="AFNEUS Logo" 
+              width={200} 
+              height={200}
+              className="rounded-2xl shadow-lg"
+            />
           </div>
           <p className="text-2xl md:text-3xl font-semibold text-gray-800 mb-4">
             Plateforme de Remboursement
@@ -125,7 +119,7 @@ export default function Home() {
           <p className="text-lg mb-8 opacity-90">
             {user 
               ? 'Gérez vos demandes de remboursement en quelques clics'
-              : 'Connectez-vous et créez votre demande en moins de 5 minutes'
+              : 'Connectez-vous avec votre compte Google AFNEUS pour commencer'
             }
           </p>
           
@@ -145,23 +139,7 @@ export default function Home() {
                 📋 Mes Demandes
               </button>
               
-              <button
-                onClick={() => router.push('/profile')}
-                className="inline-block bg-green-600 text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition border-2 border-white"
-              >
-                👤 Mon Profil
-              </button>
-              
-              {canAccessDashboard && (
-                <button
-                  onClick={() => router.push('/dashboard')}
-                  className="inline-block bg-purple-600 text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-purple-700 transition border-2 border-white"
-                >
-                  📊 Dashboard
-                </button>
-              )}
-              
-              {(userRole === 'ADMIN' || userRole === 'VALIDATOR' || userRole === 'TREASURER') && (
+              {(userProfile?.role === 'ADMIN' || userProfile?.role === 'TREASURER' || userProfile?.role === 'VALIDATOR') && (
                 <button
                   onClick={() => router.push('/validator')}
                   className="inline-block bg-orange-600 text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-orange-700 transition border-2 border-white"
@@ -170,53 +148,11 @@ export default function Home() {
                 </button>
               )}
             </div>
-          ) : (
-            <button
-              onClick={() => router.push('/auth/login')}
-              className="inline-block bg-white text-blue-600 px-12 py-5 rounded-xl font-bold text-xl hover:bg-gray-100 transition shadow-lg"
-            >
-              🔐 Se connecter pour commencer
-            </button>
-          )}
+          ) : null}
         </div>
 
         {/* Process Steps */}
         <div className="mt-20 max-w-5xl mx-auto">
-          {user && (
-            <div className="mb-12 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl p-6 border-2 border-green-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">
-                    ✅ Vous êtes connecté en tant que : 
-                    <span className="ml-2 px-3 py-1 bg-blue-600 text-white rounded-lg text-sm">
-                      {userRole === 'ADMIN' && '👨‍💼 Administrateur'}
-                      {userRole === 'TREASURER' && '💰 Trésorier'}
-                      {userRole === 'VALIDATOR' && '✅ Validateur'}
-                      {userRole === 'MEMBER' && '👤 Membre'}
-                    </span>
-                  </h3>
-                  <p className="text-gray-600">
-                    {canAccessDashboard 
-                      ? '🎯 Vous avez accès au dashboard et aux fonctionnalités de gestion'
-                      : '📝 Vous pouvez créer et suivre vos demandes de remboursement'
-                    }
-                  </p>
-                </div>
-                <button
-                  onClick={async () => {
-                    localStorage.removeItem('test_user');
-                    await supabase.auth.signOut();
-                    router.push('/');
-                    router.refresh();
-                  }}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition"
-                >
-                  🚪 Déconnexion
-                </button>
-              </div>
-            </div>
-          )}
-          
           <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">Comment ça marche ?</h2>
           
           <div className="grid md:grid-cols-4 gap-8">

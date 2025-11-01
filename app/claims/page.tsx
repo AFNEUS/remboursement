@@ -18,7 +18,7 @@ export default function MyClaimsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        window.location.href = '/login'; // Rediriger si non authentifié
+        window.location.href = '/auth/login'; // Rediriger si non authentifié
         return;
       }
 
@@ -27,7 +27,8 @@ export default function MyClaimsPage() {
         .select(`
           *,
           users!expense_claims_user_id_fkey (
-            full_name,
+            first_name,
+            last_name,
             email
           )
         `)
