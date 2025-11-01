@@ -67,14 +67,34 @@ export default function DashboardPage() {
 
       console.log('✅ Session active:', session.user.email);
 
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+      // Attendre que le profil soit créé (retry jusqu'à 5 fois)
+      let userData = null;
+      let attempts = 0;
+      
+      while (!userData && attempts < 10) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (data) {
+          userData = data;
+          break;
+        }
+        
+        if (error && error.code !== 'PGRST116') {
+          console.error('❌ Erreur récupération profil:', error);
+          break;
+        }
+        
+        console.log(`⏳ Profil pas encore créé, retry ${attempts + 1}/10...`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+      }
 
-      if (userError || !userData) {
-        console.error('❌ Utilisateur non trouvé dans public.users');
+      if (!userData) {
+        console.error('❌ Utilisateur non trouvé après 10 tentatives');
         router.push('/auth/login?error=Profil+non+trouvé');
         return;
       }
