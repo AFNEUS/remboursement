@@ -239,12 +239,23 @@ BEGIN
     user_status := 'MEMBER';
   END IF;
   
+  -- Désactiver RLS pour cette transaction
+  PERFORM set_config('request.jwt.claim.sub', NEW.id::text, true);
+  
   -- Créer le profil
   INSERT INTO public.users (id, email, first_name, last_name, role, status)
   VALUES (NEW.id, NEW.email, user_first_name, user_last_name, user_role, user_status)
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    role = EXCLUDED.role,
+    status = EXCLUDED.status,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name;
   
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE LOG 'Erreur handle_new_user pour %: %', NEW.email, SQLERRM;
+    RETURN NEW;
 END;
 $$;
 
@@ -295,7 +306,8 @@ CREATE POLICY "users_select_admin" ON public.users
     EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'ADMIN')
   );
 
-CREATE POLICY "users_insert_service" ON public.users
+-- CRITICAL: Permettre INSERT pour trigger (bypass RLS avec fonction SECURITY DEFINER)
+CREATE POLICY "users_insert_trigger" ON public.users
   FOR INSERT WITH CHECK (true);
 
 -- Events

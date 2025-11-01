@@ -82,9 +82,9 @@ export default function CallbackHandler() {
         setStatus('Connexion réussie !');
       }
 
-      // Redirection vers dashboard
+      // Redirection vers page d'accueil (pas dashboard pour éviter race condition)
       await new Promise(resolve => setTimeout(resolve, 500));
-      router.push('/dashboard');
+      window.location.href = '/';
       
     } catch (err: any) {
       console.error('❌ Erreur callback:', err);
