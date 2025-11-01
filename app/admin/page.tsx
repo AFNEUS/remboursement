@@ -123,13 +123,9 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="mt-8 bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded">
-        <h3 className="text-lg font-semibold mb-2">🔧 Configuration Actuelle</h3>
+      <div className="mt-8 bg-blue-50 border-l-4 border-blue-400 p-6 rounded">
+        <h3 className="text-lg font-semibold mb-2">🔧 Configuration Système</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-gray-700"><strong>Mode :</strong> Test Admin</p>
-            <p className="text-gray-700"><strong>Utilisateur :</strong> admin@afneus.fr</p>
-          </div>
           <div>
             <p className="text-gray-700"><strong>Calcul distance :</strong> ✅ Automatique (GPS)</p>
             <p className="text-gray-700"><strong>Barèmes :</strong> ✅ Fiscal 2024</p>

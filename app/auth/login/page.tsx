@@ -129,32 +129,6 @@ function AuthPageContent() {
     }
   }
 
-  async function handleTestMode() {
-    localStorage.setItem('test_user', JSON.stringify({
-      id: 'test-user-' + Date.now(),
-      email: 'test@afneus.org',
-      role: 'MEMBER',
-      status_code: 'APPRENANT',
-      first_name: 'Test',
-      last_name: 'User'
-    }));
-    alert('✅ Mode test activé !');
-    router.push('/dashboard');
-  }
-
-  async function handleTestAdmin() {
-    localStorage.setItem('test_user', JSON.stringify({
-      id: 'test-admin-001',
-      email: 'mohameddhia.ounally@afneus.org',
-      role: 'ADMIN',
-      status_code: 'BN',
-      first_name: 'Mohamed Dhia',
-      last_name: 'Ounally'
-    }));
-    alert('✅ Mode Admin test activé !');
-    router.push('/dashboard');
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
@@ -301,25 +275,6 @@ function AuthPageContent() {
                 </button>
               </p>
             )}
-          </div>
-
-          {/* Mode test */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <p className="text-xs text-gray-500 text-center mb-3">Mode test (développement)</p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={handleTestMode}
-                className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold hover:bg-green-200 transition"
-              >
-                👤 Test Utilisateur
-              </button>
-              <button
-                onClick={handleTestAdmin}
-                className="px-4 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm font-semibold hover:bg-orange-200 transition"
-              >
-                👨‍💼 Test Admin
-              </button>
-            </div>
           </div>
         </div>
 
