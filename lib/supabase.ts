@@ -1,33 +1,36 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from './database.types';
 
-// Client public pour usage côté client (browser)
+// ================================================================
+// CLIENT PUBLIC (Browser + Server Components)
+// ================================================================
 // Utilise NEXT_PUBLIC_ pour être disponible dans le navigateur
+// ⚠️ NE JAMAIS exposer la service_role_key ici !
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables');
+  console.error('❌ Missing Supabase environment variables');
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
   },
 });
 
-// Client admin pour usage côté serveur (API routes)
-// Ne jamais utiliser côté client!
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// ================================================================
+// ⚠️ SERVICE ROLE CLIENT REMOVED
+// ================================================================
+// La clé service_role a été déplacée dans lib/supabase-admin.ts
+// pour INTERDIRE son usage côté client.
+// 
+// Si vous avez besoin de supabaseAdmin, importez-le depuis:
+// import { supabaseAdmin } from '@/lib/supabase-admin';
+// 
+// ⚠️ UNIQUEMENT dans /app/api/* routes (serveur)
+// ================================================================
 
-export const supabaseAdmin = createClient<Database>(
-  supabaseUrl,
-  serviceRoleKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
