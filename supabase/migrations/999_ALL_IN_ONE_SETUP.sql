@@ -727,6 +727,7 @@ DROP POLICY IF EXISTS users_select_own ON public.users;
 DROP POLICY IF EXISTS users_update_own ON public.users;
 DROP POLICY IF EXISTS users_select_admin ON public.users;
 DROP POLICY IF EXISTS users_insert_public ON public.users;
+DROP POLICY IF EXISTS users_select_staff ON public.users;
 
 CREATE POLICY users_select_own ON public.users
   FOR SELECT USING (auth.uid() = id);

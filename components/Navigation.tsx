@@ -13,6 +13,7 @@ export default function Navigation() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileChecked, setProfileChecked] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -20,7 +21,13 @@ export default function Navigation() {
     // S'abonner aux changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('🔄 Auth state changed:', _event, session?.user?.email);
-      checkUser();
+      if (_event === 'SIGNED_OUT') {
+        setUser(null);
+        setUserRole(null);
+        setProfileChecked(false);
+      } else if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
+        checkUser();
+      }
     });
     
     return () => subscription.unsubscribe();
@@ -33,64 +40,104 @@ export default function Navigation() {
       if (testUser) {
         const parsed = JSON.parse(testUser);
         setUser(parsed);
-        setUserRole(parsed.role);
+        setUserRole(parsed.role || 'MEMBER');
+        setProfileChecked(true);
         setLoading(false);
         return;
       }
 
-      // Vérifier l'authentification Supabase avec getSession() au lieu de getUser()
+      // Vérifier l'authentification Supabase avec getSession()
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
         console.error('❌ Erreur getSession:', sessionError);
         setUser(null);
         setUserRole(null);
+        setProfileChecked(true);
         setLoading(false);
         return;
       }
       
       if (session?.user) {
         const authUser = session.user;
-        console.log('✅ Session trouvée:', authUser.email);
 
-        // 1) Essayer de charger la vue user_profile (rôle mappé + full_name)
-        let { data: profile, error: profileError } = await supabase
-          .from('user_profile')
+        // Essayer de lire users directement avec role/nom
+        const { data: userData, error: userError } = await supabase
+          .from('users')
           .select('*')
+          .eq('id', authUser.id)
           .single();
 
-        // 2) Si la vue ne renvoie rien (profil pas encore backfill), synchroniser puis relire
-        if (profileError || !profile) {
-          console.warn('ℹ️ user_profile introuvable, tentative de sync_current_user');
-          await supabase.rpc('sync_current_user').catch(() => {});
-          const retried = await supabase.from('user_profile').select('*').single();
-          profile = retried.data || null;
-        }
+        if (!userError && userData) {
+          // Mapper le rôle DB vers UI
+          const mappedRole = ({
+            'admin_asso': 'ADMIN',
+            'treasurer': 'TREASURER',
+            'validator': 'VALIDATOR',
+            'bn_member': 'BN',
+          }[userData.role] || 'MEMBER');
 
-        if (profile) {
           setUser({
             id: authUser.id,
-            email: profile.email || authUser.email,
-            full_name: profile.full_name,
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            status: profile.status_code,
+            email: userData.email || authUser.email,
+            full_name: userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            status: userData.status,
+            role: mappedRole,
           });
-          setUserRole(profile.role); // Déjà mappé: ADMIN/TREASURER/VALIDATOR/BN/MEMBER
+          setUserRole(mappedRole);
+          setProfileChecked(true);
+        } else if (!profileChecked) {
+          // SEULEMENT si jamais vérifié, tenter un sync UNIQUE
+          console.warn('⚠️ Première connexion: sync_current_user...');
+          const { error: syncError } = await supabase.rpc('sync_current_user');
+          setProfileChecked(true);
+          
+          if (!syncError) {
+            const retry = await supabase.from('users').select('*').eq('id', authUser.id).single();
+            if (retry.data) {
+              const mappedRole = ({
+                'admin_asso': 'ADMIN',
+                'treasurer': 'TREASURER',
+                'validator': 'VALIDATOR',
+                'bn_member': 'BN',
+              }[retry.data.role] || 'MEMBER');
+
+              setUser({
+                id: authUser.id,
+                email: retry.data.email || authUser.email,
+                full_name: retry.data.full_name || `${retry.data.first_name || ''} ${retry.data.last_name || ''}`.trim(),
+                first_name: retry.data.first_name,
+                last_name: retry.data.last_name,
+                status: retry.data.status,
+                role: mappedRole,
+              });
+              setUserRole(mappedRole);
+            } else {
+              setUser({ email: authUser.email, id: authUser.id, full_name: authUser.email.split('@')[0] });
+              setUserRole('MEMBER');
+            }
+          } else {
+            console.error('❌ Sync failed:', syncError);
+            setUser({ email: authUser.email, id: authUser.id, full_name: authUser.email.split('@')[0] });
+            setUserRole('MEMBER');
+          }
         } else {
-          // Fallback minimal
-          setUser({ email: authUser.email, id: authUser.id });
-          setUserRole(null);
+          // Profil déjà checké mais toujours pas de user row: fallback minimal
+          setUser({ email: authUser.email, id: authUser.id, full_name: authUser.email.split('@')[0] });
+          setUserRole('MEMBER');
         }
       } else {
-        console.log('⚠️ Aucune session active');
         setUser(null);
         setUserRole(null);
+        setProfileChecked(true);
       }
     } catch (error) {
       console.error('❌ Exception checkUser:', error);
       setUser(null);
       setUserRole(null);
+      setProfileChecked(true);
     }
     setLoading(false);
   }
