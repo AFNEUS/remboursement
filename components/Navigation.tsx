@@ -50,25 +50,37 @@ export default function Navigation() {
       }
       
       if (session?.user) {
-        const user = session.user;
-        console.log('✅ Session trouvée:', user.email);
-        
-        // Récupérer les données utilisateur depuis public.users
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('role, first_name, last_name, email, status')
-          .eq('id', user.id)
+        const authUser = session.user;
+        console.log('✅ Session trouvée:', authUser.email);
+
+        // 1) Essayer de charger la vue user_profile (rôle mappé + full_name)
+        let { data: profile, error: profileError } = await supabase
+          .from('user_profile')
+          .select('*')
           .single();
 
-        if (userError) {
-          console.error('❌ Erreur récupération userData:', userError);
-          // Utilisateur existe dans auth mais pas dans public.users
-          setUser({ email: user.email, id: user.id });
+        // 2) Si la vue ne renvoie rien (profil pas encore backfill), synchroniser puis relire
+        if (profileError || !profile) {
+          console.warn('ℹ️ user_profile introuvable, tentative de sync_current_user');
+          await supabase.rpc('sync_current_user').catch(() => {});
+          const retried = await supabase.from('user_profile').select('*').single();
+          profile = retried.data || null;
+        }
+
+        if (profile) {
+          setUser({
+            id: authUser.id,
+            email: profile.email || authUser.email,
+            full_name: profile.full_name,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            status: profile.status_code,
+          });
+          setUserRole(profile.role); // Déjà mappé: ADMIN/TREASURER/VALIDATOR/BN/MEMBER
+        } else {
+          // Fallback minimal
+          setUser({ email: authUser.email, id: authUser.id });
           setUserRole(null);
-        } else if (userData) {
-          console.log('✅ User data trouvé:', userData.email, userData.role);
-          setUser({ ...user, ...(userData as any) });
-          setUserRole((userData as any).role);
         }
       } else {
         console.log('⚠️ Aucune session active');
@@ -213,7 +225,7 @@ export default function Navigation() {
                 >
                   <span>👤</span>
                   <span className="hidden lg:inline text-sm">
-                    {(user as any).first_name || user.email?.split('@')[0]}
+                    {(user as any).full_name || (user as any).first_name || user.email?.split('@')[0]}
                   </span>
                 </button>
               </div>

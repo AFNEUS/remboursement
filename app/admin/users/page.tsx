@@ -32,7 +32,7 @@ export default function AdminUsersPage() {
         .eq('id', user.id)
         .single();
 
-      if (!userData || userData.role !== 'ADMIN') {
+      if (!userData || (userData.role !== 'ADMIN' && userData.role !== 'admin_asso')) {
         alert('⛔ Accès refusé - Réservé aux administrateurs');
         router.push('/dashboard');
         return;
@@ -108,7 +108,7 @@ export default function AdminUsersPage() {
 
   const filteredUsers = users.filter(u => {
     if (filter === 'all') return true;
-    if (filter === 'admin') return u.role === 'ADMIN';
+    if (filter === 'admin') return u.role === 'ADMIN' || u.role === 'admin_asso';
     if (filter === 'bn') return u.status === 'BN';
     if (filter === 'member') return u.status === 'MEMBER';
     return true;
@@ -140,7 +140,7 @@ export default function AdminUsersPage() {
         </div>
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
           <div className="text-sm text-gray-600 mb-1">Administrateurs</div>
-          <div className="text-2xl font-bold">{users.filter(u => u.role === 'ADMIN').length}</div>
+          <div className="text-2xl font-bold">{users.filter(u => u.role === 'ADMIN' || u.role === 'admin_asso').length}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
           <div className="text-sm text-gray-600 mb-1">Bureau National</div>
@@ -173,7 +173,7 @@ export default function AdminUsersPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            👨‍💼 Admins ({users.filter(u => u.role === 'ADMIN').length})
+            👨‍💼 Admins ({users.filter(u => u.role === 'ADMIN' || u.role === 'admin_asso').length})
           </button>
           <button
             onClick={() => setFilter('bn')}

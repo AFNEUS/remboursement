@@ -67,7 +67,9 @@ export default function EventBaremesPage() {
       .eq('id', user.id)
       .single();
 
-    if (!userData || (userData as any).role !== 'ADMIN') {
+    const role = (userData as any)?.role;
+    const isAdmin = role === 'ADMIN' || role === 'admin_asso';
+    if (!isAdmin) {
       alert('❌ Accès refusé. Réservé aux Administrateurs.');
       router.push('/');
       return;
