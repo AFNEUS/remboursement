@@ -271,9 +271,18 @@ export default function Navigation() {
                   }`}
                 >
                   <span>👤</span>
-                  <span className="hidden lg:inline text-sm">
-                    {(user as any).full_name || (user as any).first_name || user.email?.split('@')[0]}
-                  </span>
+                  <div className="hidden lg:flex flex-col items-start text-left">
+                    <span className="text-sm font-bold">
+                      {(user as any).full_name || `${(user as any).first_name || ''} ${(user as any).last_name || ''}`.trim() || user.email?.split('@')[0]}
+                    </span>
+                    <span className="text-xs opacity-80">
+                      {userRole === 'ADMIN' ? '👑 Super Admin' : 
+                       userRole === 'BN' ? '⭐ Bureau National' :
+                       userRole === 'TREASURER' ? '💰 Trésorier' :
+                       userRole === 'VALIDATOR' ? '✅ Validateur' :
+                       '👥 Membre'}
+                    </span>
+                  </div>
                 </button>
               </div>
 
@@ -310,6 +319,21 @@ export default function Navigation() {
         {/* Mobile Menu */}
         {mobileMenuOpen && user && (
           <div className="md:hidden py-4 border-t border-white/20">
+            {/* User info header for mobile */}
+            <div className="px-4 py-3 mb-2 bg-white/10 rounded-lg">
+              <div className="font-bold text-white">
+                {(user as any).full_name || `${(user as any).first_name || ''} ${(user as any).last_name || ''}`.trim() || user.email?.split('@')[0]}
+              </div>
+              <div className="text-xs text-white/80 mt-1">
+                {userRole === 'ADMIN' ? '👑 Super Admin' : 
+                 userRole === 'BN' ? '⭐ Bureau National' :
+                 userRole === 'TREASURER' ? '💰 Trésorier' :
+                 userRole === 'VALIDATOR' ? '✅ Validateur' :
+                 '👥 Membre'}
+              </div>
+              <div className="text-xs text-white/60 mt-1">{user.email}</div>
+            </div>
+
             <div className="flex flex-col gap-1">
               <button
                 onClick={() => {

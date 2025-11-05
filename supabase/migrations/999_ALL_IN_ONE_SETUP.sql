@@ -606,6 +606,7 @@ END$$;
 
 -- ---------------------------------------------------------------------
 -- TRIGGER: handle_new_user (auto-création profil depuis auth.users)
+-- AVEC VÉRIFICATION LISTE BLANCHE
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
@@ -614,6 +615,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  whitelist RECORD;
   full_name TEXT;
   first_name TEXT;
   last_name TEXT;
@@ -621,30 +623,44 @@ DECLARE
   mapped_role TEXT;
   user_status TEXT;
 BEGIN
-  full_name := COALESCE(
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'name',
-    split_part(NEW.email, '@', 1)
-  );
-
-  name_parts := string_to_array(full_name, ' ');
-  first_name := COALESCE(name_parts[1], split_part(NEW.email, '@', 1));
-  last_name := COALESCE(array_to_string(name_parts[2:array_length(name_parts,1)], ' '), first_name);
-
-  -- Mapping rôle par email/domaine
-  IF NEW.email ILIKE '%mohameddhia.ounally@afneus.org%' THEN
-    mapped_role := 'validator';
-    user_status := 'ADMIN';
-  ELSIF NEW.email ILIKE '%@afneus.org' THEN
-    mapped_role := 'bn_member';
-    user_status := 'BN';
-  ELSE
+  -- Vérifier si l'email est dans la liste blanche
+  SELECT * INTO whitelist FROM public.authorized_users WHERE LOWER(email) = LOWER(NEW.email);
+  
+  IF NOT FOUND THEN
+    -- Email non autorisé: compte inactif
     mapped_role := 'user';
     user_status := 'MEMBER';
+    first_name := split_part(NEW.email, '@', 1);
+    last_name := first_name;
+    full_name := first_name;
+  ELSE
+    -- Email autorisé: utiliser les données de la whitelist
+    mapped_role := whitelist.role;
+    first_name := COALESCE(whitelist.first_name, split_part(NEW.email, '@', 1));
+    last_name := COALESCE(whitelist.last_name, first_name);
+    full_name := TRIM(COALESCE(first_name || ' ' || last_name, split_part(NEW.email, '@', 1)));
+    
+    -- Définir le status selon le rôle
+    IF mapped_role = 'admin_asso' THEN
+      user_status := 'ADMIN';
+    ELSIF mapped_role IN ('bn_member', 'treasurer', 'validator') THEN
+      user_status := 'BN';
+    ELSE
+      user_status := 'MEMBER';
+    END IF;
   END IF;
 
-  INSERT INTO public.users (id, email, full_name, first_name, last_name, role, status)
-  VALUES (NEW.id, NEW.email, full_name, first_name, last_name, mapped_role, user_status)
+  INSERT INTO public.users (id, email, full_name, first_name, last_name, role, status, is_active)
+  VALUES (
+    NEW.id, 
+    NEW.email, 
+    full_name, 
+    first_name, 
+    last_name, 
+    mapped_role, 
+    user_status,
+    whitelist.email IS NOT NULL
+  )
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     full_name = EXCLUDED.full_name,
@@ -652,6 +668,7 @@ BEGIN
     last_name = EXCLUDED.last_name,
     role = EXCLUDED.role,
     status = EXCLUDED.status,
+    is_active = EXCLUDED.is_active,
     updated_at = NOW();
 
   RETURN NEW;
@@ -663,7 +680,42 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
 
+-- Liste blanche des emails autorisés (AFNEUS Bureau National 2024-2025)
+CREATE TABLE IF NOT EXISTS public.authorized_users (
+  email TEXT PRIMARY KEY,
+  first_name TEXT,
+  last_name TEXT,
+  role TEXT NOT NULL DEFAULT 'bn_member',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS pour authorized_users: lecture seule pour admin
+ALTER TABLE public.authorized_users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS authorized_users_select_admin ON public.authorized_users;
+CREATE POLICY authorized_users_select_admin ON public.authorized_users
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin_asso')
+  );
+
+-- Vider et remplir la liste blanche
+TRUNCATE public.authorized_users;
+INSERT INTO public.authorized_users (email, first_name, last_name, role, notes) VALUES
+  ('mohameddhia.ounally@afneus.org', 'Mohamed Dhia', 'Ounally', 'admin_asso', 'Super Admin'),
+  ('agathe.bares@afneus.org', 'Agathe', 'Bares', 'bn_member', 'Bureau National'),
+  ('anneclaire.beauvais@afneus.org', 'Anne-Claire', 'Beauvais', 'bn_member', 'Bureau National'),
+  ('corentin.chadirac@afneus.org', 'Corentin', 'Chadirac', 'bn_member', 'Bureau National'),
+  ('emie.sanchez@afneus.org', 'Emie', 'Sanchez', 'bn_member', 'Bureau National'),
+  ('eva.schindler@afneus.org', 'Eva', 'Schindler', 'bn_member', 'Bureau National'),
+  ('lucas.deperthuis@afneus.org', 'Lucas', 'De Perthuis', 'bn_member', 'Bureau National'),
+  ('manon.soubeyrand@afneus.org', 'Manon', 'Soubeyrand', 'bn_member', 'Bureau National'),
+  ('rebecca.roux@afneus.org', 'Rebecca', 'Roux', 'bn_member', 'Bureau National'),
+  ('salome.lance-richardot@afneus.org', 'Salomé', 'Lance-Richardot', 'bn_member', 'Bureau National'),
+  ('thomas.dujak@afneus.org', 'Thomas', 'Dujak', 'bn_member', 'Bureau National'),
+  ('yannis.loumouamou@afneus.org', 'Yannis', 'Loumouamou', 'bn_member', 'Bureau National');
+
 -- RPC: Synchroniser l'utilisateur courant depuis auth.users vers public.users
+-- AVEC VÉRIFICATION LISTE BLANCHE
 CREATE OR REPLACE FUNCTION public.sync_current_user()
 RETURNS VOID
 LANGUAGE plpgsql
@@ -672,6 +724,7 @@ SET search_path = public
 AS $$
 DECLARE
   au RECORD;
+  whitelist RECORD;
   full_name TEXT;
   first_name TEXT;
   last_name TEXT;
@@ -684,29 +737,44 @@ BEGIN
     RETURN;
   END IF;
 
-  full_name := COALESCE(
-    au.raw_user_meta_data->>'full_name',
-    au.raw_user_meta_data->>'name',
-    split_part(au.email, '@', 1)
-  );
-
-  name_parts := string_to_array(full_name, ' ');
-  first_name := COALESCE(name_parts[1], split_part(au.email, '@', 1));
-  last_name := COALESCE(array_to_string(name_parts[2:array_length(name_parts,1)], ' '), first_name);
-
-  IF au.email ILIKE 'mohameddhia.ounally@afneus.org' THEN
-    mapped_role := 'admin_asso';
-    user_status := 'ADMIN';
-  ELSIF au.email ILIKE '%@afneus.org' THEN
-    mapped_role := 'bn_member';
-    user_status := 'BN';
-  ELSE
+  -- Vérifier si l'email est dans la liste blanche
+  SELECT * INTO whitelist FROM public.authorized_users WHERE LOWER(email) = LOWER(au.email);
+  
+  IF NOT FOUND THEN
+    -- Email non autorisé: bloquer en mettant role = 'user' et is_active = false
     mapped_role := 'user';
     user_status := 'MEMBER';
+    first_name := split_part(au.email, '@', 1);
+    last_name := first_name;
+    full_name := first_name;
+  ELSE
+    -- Email autorisé: utiliser les données de la whitelist
+    mapped_role := whitelist.role;
+    first_name := COALESCE(whitelist.first_name, split_part(au.email, '@', 1));
+    last_name := COALESCE(whitelist.last_name, first_name);
+    full_name := TRIM(COALESCE(first_name || ' ' || last_name, split_part(au.email, '@', 1)));
+    
+    -- Définir le status selon le rôle
+    IF mapped_role = 'admin_asso' THEN
+      user_status := 'ADMIN';
+    ELSIF mapped_role IN ('bn_member', 'treasurer', 'validator') THEN
+      user_status := 'BN';
+    ELSE
+      user_status := 'MEMBER';
+    END IF;
   END IF;
 
-  INSERT INTO public.users (id, email, full_name, first_name, last_name, role, status)
-  VALUES (au.id, au.email, full_name, first_name, last_name, mapped_role, user_status)
+  INSERT INTO public.users (id, email, full_name, first_name, last_name, role, status, is_active)
+  VALUES (
+    au.id, 
+    au.email, 
+    full_name, 
+    first_name, 
+    last_name, 
+    mapped_role, 
+    user_status,
+    whitelist.email IS NOT NULL
+  )
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     full_name = EXCLUDED.full_name,
@@ -714,6 +782,7 @@ BEGIN
     last_name = EXCLUDED.last_name,
     role = EXCLUDED.role,
     status = EXCLUDED.status,
+    is_active = EXCLUDED.is_active,
     updated_at = NOW();
 END;
 $$;
@@ -889,11 +958,38 @@ FROM (
 WHERE NOT EXISTS (SELECT 1 FROM public.plafonds p WHERE p.expense_type = v.type AND p.valid_to IS NULL);
 
 -- ---------------------------------------------------------------------
--- ELEVATION DU COMPTE ADMIN PRINCIPAL (pour déblocage immédiat)
+-- SYNCHRONISATION DES UTILISATEURS EXISTANTS AVEC LA LISTE BLANCHE
 -- ---------------------------------------------------------------------
-UPDATE public.users
-SET role = 'admin_asso', status = 'ADMIN', first_name = 'Mohamed Dhia', last_name = 'Ounally', full_name = 'Mohamed Dhia Ounally', updated_at = NOW()
-WHERE email = 'mohameddhia.ounally@afneus.org';
+DO $$
+DECLARE
+  whitelist RECORD;
+BEGIN
+  -- Mettre à jour tous les utilisateurs existants selon la whitelist
+  FOR whitelist IN SELECT * FROM public.authorized_users LOOP
+    UPDATE public.users
+    SET 
+      first_name = whitelist.first_name,
+      last_name = whitelist.last_name,
+      full_name = TRIM(COALESCE(whitelist.first_name || ' ' || whitelist.last_name, split_part(email, '@', 1))),
+      role = whitelist.role,
+      status = CASE 
+        WHEN whitelist.role = 'admin_asso' THEN 'ADMIN'
+        WHEN whitelist.role IN ('bn_member', 'treasurer', 'validator') THEN 'BN'
+        ELSE 'MEMBER'
+      END,
+      is_active = true,
+      updated_at = NOW()
+    WHERE LOWER(email) = LOWER(whitelist.email);
+  END LOOP;
+  
+  -- Désactiver les comptes non-autorisés
+  UPDATE public.users
+  SET is_active = false, role = 'user', status = 'MEMBER', updated_at = NOW()
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.authorized_users 
+    WHERE LOWER(authorized_users.email) = LOWER(users.email)
+  );
+END$$;
 
 -- ---------------------------------------------------------------------
 -- VUES & RPC UTILISATEUR POUR LA PAGE PROFIL
