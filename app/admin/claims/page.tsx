@@ -48,12 +48,8 @@ export default function AdminClaimsPage() {
 
   async function loadBNMembers() {
     try {
-      // Fetch only BN members from the database
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, email, first_name, last_name, full_name, role')
-        .eq('role', 'bn_member')
-        .order('full_name');
+      // Fetch only BN members via RPC
+      const { data, error } = await supabase.rpc('get_bn_members');
 
       if (error) {
         console.error('Error loading BN members:', error);

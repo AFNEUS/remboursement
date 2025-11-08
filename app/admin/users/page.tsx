@@ -44,15 +44,12 @@ export default function AdminUsersPage() {
 
       setCurrentUser(userData);
 
-      // Charger tous les utilisateurs
-      const { data: allUsers, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Charger tous les utilisateurs via RPC
+      const { data: allUsers, error } = await supabase.rpc('get_all_users');
 
       if (error) throw error;
 
-      setUsers(allUsers || []);
+      setUsers((allUsers as any[]) || []);
     } catch (error: any) {
       console.error('Erreur chargement:', error);
       alert(`❌ Erreur: ${error.message}`);
@@ -65,10 +62,10 @@ export default function AdminUsersPage() {
     if (!confirm(`Confirmer le changement de rôle ?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ role: newRole, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+      const { error } = await supabase.rpc('admin_update_user_role', {
+        target_user_id: userId,
+        new_role: newRole
+      });
 
       if (error) throw error;
 
@@ -83,10 +80,10 @@ export default function AdminUsersPage() {
     if (!confirm(`Confirmer le changement de statut ?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+      const { error } = await supabase.rpc('admin_update_user_status', {
+        target_user_id: userId,
+        new_status: newStatus
+      });
 
       if (error) throw error;
 

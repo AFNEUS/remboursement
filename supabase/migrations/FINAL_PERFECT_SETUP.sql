@@ -827,6 +827,144 @@ $$;
 
 COMMENT ON FUNCTION public.is_admin IS 'Vérifie si l''utilisateur courant est admin - utilisé dans RLS';
 
+-- ---------------------------------------------------------------------
+-- 2.9 FONCTION ADMIN: get_all_users (pour admin users page)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_all_users()
+RETURNS TABLE (
+    id UUID,
+    email TEXT,
+    full_name TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    role TEXT,
+    status TEXT,
+    phone TEXT,
+    iban TEXT,
+    iban_verified BOOLEAN,
+    is_active BOOLEAN,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+)
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT id, email, full_name, first_name, last_name, role, status, phone, iban, iban_verified, is_active, created_at, updated_at
+    FROM public.users
+    WHERE EXISTS (
+        SELECT 1 FROM public.users u2
+        WHERE u2.id = auth.uid()
+        AND u2.role = 'admin_asso'
+    )
+    ORDER BY created_at DESC;
+$$;
+
+COMMENT ON FUNCTION public.get_all_users IS 'Liste tous les utilisateurs - accès admin uniquement';
+
+-- ---------------------------------------------------------------------
+-- 2.10 FONCTION ADMIN: admin_update_user_role
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.admin_update_user_role(
+    target_user_id UUID,
+    new_role TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- Vérifier que l'appelant est admin
+    IF NOT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role = 'admin_asso'
+    ) THEN
+        RAISE EXCEPTION 'Accès refusé - Admin uniquement';
+    END IF;
+    
+    -- Valider le rôle
+    IF new_role NOT IN ('admin_asso', 'treasurer', 'validator', 'bn_member', 'user') THEN
+        RAISE EXCEPTION 'Rôle invalide';
+    END IF;
+    
+    -- Update le rôle
+    UPDATE public.users
+    SET role = new_role, updated_at = NOW()
+    WHERE id = target_user_id;
+    
+    RETURN TRUE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.admin_update_user_role IS 'Permet à un admin de modifier le rôle d''un utilisateur';
+
+-- ---------------------------------------------------------------------
+-- 2.11 FONCTION ADMIN: admin_update_user_status
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.admin_update_user_status(
+    target_user_id UUID,
+    new_status TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- Vérifier que l'appelant est admin
+    IF NOT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role = 'admin_asso'
+    ) THEN
+        RAISE EXCEPTION 'Accès refusé - Admin uniquement';
+    END IF;
+    
+    -- Valider le statut
+    IF new_status NOT IN ('active', 'inactive', 'pending', 'banned') THEN
+        RAISE EXCEPTION 'Statut invalide';
+    END IF;
+    
+    -- Update le statut
+    UPDATE public.users
+    SET status = new_status, updated_at = NOW()
+    WHERE id = target_user_id;
+    
+    RETURN TRUE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.admin_update_user_status IS 'Permet à un admin de modifier le statut d''un utilisateur';
+
+-- ---------------------------------------------------------------------
+-- 2.12 FONCTION: get_bn_members (pour dropdown BN dans claims)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_bn_members()
+RETURNS TABLE (
+    id UUID,
+    email TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    full_name TEXT,
+    role TEXT
+)
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT id, email, first_name, last_name, full_name, role
+    FROM public.users
+    WHERE role = 'bn_member'
+    AND EXISTS (
+        SELECT 1 FROM public.users u2
+        WHERE u2.id = auth.uid()
+        AND u2.role = 'admin_asso'
+    )
+    ORDER BY full_name;
+$$;
+
+COMMENT ON FUNCTION public.get_bn_members IS 'Liste les membres BN - accès admin uniquement';
+
 -- =====================================================================
 -- PHASE 3: ROW LEVEL SECURITY (RLS)
 -- =====================================================================
@@ -1063,10 +1201,10 @@ BEGIN
     FROM pg_proc p
     JOIN pg_namespace n ON p.pronamespace = n.oid
     WHERE n.nspname = 'public'
-    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile', 'calculate_train_refund', 'is_staff', 'is_admin');
+    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile', 'calculate_train_refund', 'is_staff', 'is_admin', 'get_all_users', 'admin_update_user_role', 'admin_update_user_status', 'get_bn_members');
     
-    IF functions_count < 8 THEN
-        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 8', functions_count;
+    IF functions_count < 12 THEN
+        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 12', functions_count;
     END IF;
     
     -- Vérifier policies RLS
