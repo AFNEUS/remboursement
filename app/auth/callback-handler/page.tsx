@@ -38,7 +38,8 @@ export default function CallbackHandler() {
         
         const { data } = await supabase.rpc('get_current_user_safe');
         
-        if (data && data.length > 0) {
+        // @ts-ignore - RPC types not properly generated
+        if (data && Array.isArray(data) && data.length > 0) {
           profile = data[0];
           break;
         }

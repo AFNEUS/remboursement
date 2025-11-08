@@ -36,13 +36,10 @@ export default function BaremesAdminPage() {
   async function handleSave() {
     if (!editing || !formData.rate_per_km) return;
 
-    const updateData: Partial<Bareme> = {
-      rate_per_km: formData.rate_per_km,
-    };
-
     const { error } = await supabase
       .from('baremes')
-      .update(updateData as any)
+      // @ts-ignore - Supabase generated types incorrectly mark update as 'never'
+      .update({ rate_per_km: formData.rate_per_km })
       .eq('id', editing);
 
     if (!error) {
