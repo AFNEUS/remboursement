@@ -182,11 +182,11 @@ export default function Navigation() {
 
   // Permissions basées sur le rôle actif (vue courante)
   const effectiveRole = activeRole || userRole;
-  const canAccessDashboard = effectiveRole && ['ADMIN', 'TREASURER', 'VALIDATOR'].includes(effectiveRole);
+  const canAccessDashboard = effectiveRole && ['ADMIN', 'TREASURER', 'VALIDATOR', 'BN', 'MEMBER'].includes(effectiveRole);
   const canValidate = effectiveRole && ['ADMIN', 'VALIDATOR', 'TREASURER'].includes(effectiveRole);
   const canAccessTreasurer = effectiveRole && ['ADMIN', 'TREASURER'].includes(effectiveRole);
-  const isAdmin = userRole === 'ADMIN'; // Vrai rôle pour afficher le switch
-  const isViewingAsAdmin = effectiveRole === 'ADMIN';
+  const isAdmin = userRole === 'ADMIN'; // Vrai rôle (pour afficher le switch uniquement)
+  const isViewingAsAdmin = effectiveRole === 'ADMIN'; // Vue actuelle
 
   const isActive = (path: string) => pathname === path;
 
@@ -278,9 +278,9 @@ export default function Navigation() {
                 </button>
               )}
 
-              {isAdmin && (
+              {isViewingAsAdmin && (
                 <button
-                  onClick={() => router.push('/admin/events')}
+                  onClick={() => router.push('/admin')}
                   className={`px-4 py-2 rounded-lg font-semibold transition ${
                     pathname?.startsWith('/admin')
                       ? 'bg-white text-blue-600'
@@ -324,11 +324,14 @@ export default function Navigation() {
                       {(user as any).full_name || `${(user as any).first_name || ''} ${(user as any).last_name || ''}`.trim() || user.email?.split('@')[0]}
                     </span>
                     <span className="text-xs opacity-80">
-                      {userRole === 'ADMIN' ? '👑 Super Admin' : 
-                       userRole === 'BN' ? '⭐ Bureau National' :
-                       userRole === 'TREASURER' ? '💰 Trésorier' :
-                       userRole === 'VALIDATOR' ? '✅ Validateur' :
+                      {effectiveRole === 'ADMIN' ? '👑 Super Admin' : 
+                       effectiveRole === 'BN' ? '⭐ Bureau National' :
+                       effectiveRole === 'TREASURER' ? '💰 Trésorier' :
+                       effectiveRole === 'VALIDATOR' ? '✅ Validateur' :
                        '👥 Membre'}
+                      {isAdmin && activeRole && activeRole !== userRole && (
+                        <span className="ml-1 text-yellow-300">• Vue</span>
+                      )}
                     </span>
                   </div>
                 </button>
@@ -372,12 +375,15 @@ export default function Navigation() {
               <div className="font-bold text-white">
                 {(user as any).full_name || `${(user as any).first_name || ''} ${(user as any).last_name || ''}`.trim() || user.email?.split('@')[0]}
               </div>
-              <div className="text-xs text-white/80 mt-1">
-                {userRole === 'ADMIN' ? '👑 Super Admin' : 
-                 userRole === 'BN' ? '⭐ Bureau National' :
-                 userRole === 'TREASURER' ? '💰 Trésorier' :
-                 userRole === 'VALIDATOR' ? '✅ Validateur' :
+              <div className="text-sm font-semibold text-white">
+                {effectiveRole === 'ADMIN' ? '👑 Super Admin' : 
+                 effectiveRole === 'BN' ? '⭐ Bureau National' :
+                 effectiveRole === 'TREASURER' ? '💰 Trésorier' :
+                 effectiveRole === 'VALIDATOR' ? '✅ Validateur' :
                  '👥 Membre'}
+                {isAdmin && activeRole && activeRole !== userRole && (
+                  <span className="ml-2 text-yellow-300 text-xs">• Vue seulement</span>
+                )}
               </div>
               <div className="text-xs text-white/60 mt-1">{user.email}</div>
             </div>
@@ -439,16 +445,35 @@ export default function Navigation() {
                 </button>
               )}
 
-              {isAdmin && (
+              {isViewingAsAdmin && (
                 <button
                   onClick={() => {
-                    router.push('/admin/events');
+                    router.push('/admin');
                     setMobileMenuOpen(false);
                   }}
                   className="w-full text-left px-4 py-3 rounded-lg font-semibold text-white hover:bg-white/10 transition"
                 >
                   👑 Admin
                 </button>
+              )}
+              
+              {isAdmin && (
+                <div className="border-t border-white/20 mt-2 pt-2">
+                  <label className="text-xs text-white/60 px-4 block mb-2">Changer de vue :</label>
+                  <select
+                    value={activeRole || userRole || ''}
+                    onChange={(e) => {
+                      switchRole(e.target.value);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-3 rounded-lg font-semibold bg-white/20 text-white border border-white/30 hover:bg-white/30 transition"
+                  >
+                    <option value="ADMIN" className="text-gray-900">👑 Vue Admin</option>
+                    <option value="VALIDATOR" className="text-gray-900">✅ Vue Validateur</option>
+                    <option value="TREASURER" className="text-gray-900">💰 Vue Trésorier</option>
+                    <option value="MEMBER" className="text-gray-900">👥 Vue Membre</option>
+                  </select>
+                </div>
               )}
 
               <button

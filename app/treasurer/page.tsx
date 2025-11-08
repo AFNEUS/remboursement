@@ -66,8 +66,7 @@ export default function TreasurerDashboard() {
           users!expense_claims_user_id_fkey (
             full_name,
             email,
-            iban,
-            iban_holder_name
+            iban
           )
         `)
         .in('status', ['validated', 'in_payment_batch'])
@@ -239,7 +238,7 @@ export default function TreasurerDashboard() {
                   </td>
                   <td className="px-4 py-3">
                     <div>
-                      <p className="font-semibold">{claim.users?.iban_holder_name || claim.users?.full_name}</p>
+                      <p className="font-semibold">{claim.users?.full_name}</p>
                       <p className="text-xs text-gray-500">{claim.users?.email}</p>
                     </div>
                   </td>
