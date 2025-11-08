@@ -791,6 +791,42 @@ $$;
 
 COMMENT ON FUNCTION public.calculate_train_refund IS 'Calcule le remboursement train basé sur la distance (Paris-Lyon ≠ Paris-Marseille)';
 
+-- ---------------------------------------------------------------------
+-- 2.7 FONCTION HELPER: is_staff (pour RLS policies)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role IN ('admin_asso', 'treasurer', 'validator')
+    );
+$$;
+
+COMMENT ON FUNCTION public.is_staff IS 'Vérifie si l''utilisateur courant est staff (admin/treasurer/validator) - utilisé dans RLS';
+
+-- ---------------------------------------------------------------------
+-- 2.8 FONCTION HELPER: is_admin (pour RLS policies)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role = 'admin_asso'
+    );
+$$;
+
+COMMENT ON FUNCTION public.is_admin IS 'Vérifie si l''utilisateur courant est admin - utilisé dans RLS';
+
 -- =====================================================================
 -- PHASE 3: ROW LEVEL SECURITY (RLS)
 -- =====================================================================
@@ -826,13 +862,7 @@ CREATE POLICY claims_update_own ON public.expense_claims
 
 CREATE POLICY claims_staff_all ON public.expense_claims
     FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE id = auth.uid()
-            AND role IN ('admin_asso', 'treasurer', 'validator')
-        )
-    );
+    USING (public.is_staff());
 
 -- ---------------------------------------------------------------------
 -- RLS: events (lecture tous, écriture staff)
@@ -848,13 +878,7 @@ CREATE POLICY events_select_all ON public.events
 
 CREATE POLICY events_staff_all ON public.events
     FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE id = auth.uid()
-            AND role IN ('admin_asso', 'treasurer', 'validator')
-        )
-    );
+    USING (public.is_staff());
 
 -- ---------------------------------------------------------------------
 -- RLS: event_baremes (lecture tous, écriture staff)
@@ -870,13 +894,7 @@ CREATE POLICY baremes_select_all ON public.event_baremes
 
 CREATE POLICY baremes_staff_all ON public.event_baremes
     FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE id = auth.uid()
-            AND role IN ('admin_asso', 'treasurer', 'validator')
-        )
-    );
+    USING (public.is_staff());
 
 -- ---------------------------------------------------------------------
 -- RLS: notifications (utilisateur uniquement)
@@ -909,13 +927,7 @@ CREATE POLICY justifs_own ON public.justificatifs
 
 CREATE POLICY justifs_staff ON public.justificatifs
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE id = auth.uid()
-            AND role IN ('admin_asso', 'treasurer', 'validator')
-        )
-    );
+    USING (public.is_staff());
 
 -- ---------------------------------------------------------------------
 -- RLS: audit_logs (admin uniquement)
@@ -926,13 +938,7 @@ DROP POLICY IF EXISTS audit_admin_only ON public.audit_logs;
 
 CREATE POLICY audit_admin_only ON public.audit_logs
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE id = auth.uid()
-            AND role = 'admin_asso'
-        )
-    );
+    USING (public.is_admin());
 
 -- ---------------------------------------------------------------------
 -- RLS: authorized_users (admin uniquement)
@@ -943,13 +949,7 @@ DROP POLICY IF EXISTS whitelist_admin_only ON public.authorized_users;
 
 CREATE POLICY whitelist_admin_only ON public.authorized_users
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE id = auth.uid()
-            AND role = 'admin_asso'
-        )
-    );
+    USING (public.is_admin());
 
 -- ---------------------------------------------------------------------
 -- RLS: baremes, taux, plafonds (lecture tous, écriture admin)
@@ -959,27 +959,19 @@ ALTER TABLE public.taux_remboursement ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.plafonds ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY baremes_read_all ON public.baremes FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY baremes_admin_write ON public.baremes FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin_asso')
-);
+CREATE POLICY baremes_admin_write ON public.baremes FOR ALL USING (public.is_admin());
 
 CREATE POLICY taux_read_all ON public.taux_remboursement FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY taux_admin_write ON public.taux_remboursement FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin_asso')
-);
+CREATE POLICY taux_admin_write ON public.taux_remboursement FOR ALL USING (public.is_admin());
 
 CREATE POLICY plafonds_read_all ON public.plafonds FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY plafonds_admin_write ON public.plafonds FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin_asso')
-);
+CREATE POLICY plafonds_admin_write ON public.plafonds FOR ALL USING (public.is_admin());
 
 -- Train baremes RLS
 ALTER TABLE public.train_baremes ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY train_baremes_read_all ON public.train_baremes FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY train_baremes_admin_write ON public.train_baremes FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin_asso')
-);
+CREATE POLICY train_baremes_admin_write ON public.train_baremes FOR ALL USING (public.is_admin());
 
 -- =====================================================================
 -- PHASE 4: DONNÉES INITIALES
@@ -1071,10 +1063,10 @@ BEGIN
     FROM pg_proc p
     JOIN pg_namespace n ON p.pronamespace = n.oid
     WHERE n.nspname = 'public'
-    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile', 'calculate_train_refund');
+    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile', 'calculate_train_refund', 'is_staff', 'is_admin');
     
-    IF functions_count < 6 THEN
-        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 6', functions_count;
+    IF functions_count < 8 THEN
+        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 8', functions_count;
     END IF;
     
     -- Vérifier policies RLS

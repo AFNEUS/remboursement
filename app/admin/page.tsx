@@ -2,24 +2,49 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [role, setRole] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const testRole = localStorage.getItem('test_role');
+    checkAdminAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function checkAdminAccess() {
+    // Mode test
     const testUser = localStorage.getItem('test_user');
-    
-    if (!testUser || testRole !== 'treasurer') {
+    if (testUser) {
+      const parsed = JSON.parse(testUser);
+      if (parsed.role !== 'ADMIN') {
+        alert('❌ Accès refusé - Réservé aux administrateurs');
+        router.push('/');
+        return;
+      }
+      setLoading(false);
+      return;
+    }
+
+    // Production: vérifier via Supabase
+    const { data } = await supabase.rpc('get_current_user_safe');
+    if (!data || !Array.isArray(data) || (data as any[]).length === 0) {
       router.push('/');
       return;
     }
-    
-    setRole(testRole);
-  }, [router]);
 
-  if (!role) {
+    const user = (data as any[])[0];
+    if (user.role !== 'admin_asso') {
+      alert('❌ Accès refusé - Réservé aux administrateurs');
+      router.push('/');
+      return;
+    }
+
+    setLoading(false);
+  }
+
+  if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">⏳ Vérification...</div>

@@ -51,6 +51,13 @@ export default function ValidatorDashboard() {
 
     const { data: userData } = await supabase.rpc('get_current_user_safe');
     
+    if (!userData || !Array.isArray(userData) || (userData as any[]).length === 0) {
+      router.push('/');
+      return;
+    }
+    
+    const dbUser = (userData as any[])[0];
+    
     // Mapper role DB vers UI pour vérification
     const roleMap: Record<string, string> = {
       'admin_asso': 'ADMIN',
@@ -59,9 +66,9 @@ export default function ValidatorDashboard() {
       'bn_member': 'BN',
       'user': 'MEMBER'
     };
-    const mappedRole = userData ? roleMap[userData.role] || userData.role : null;
+    const mappedRole = roleMap[dbUser.role] || 'MEMBER';
     
-    if (!userData || !['ADMIN', 'VALIDATOR', 'TREASURER'].includes(mappedRole || '')) {
+    if (!['ADMIN', 'VALIDATOR', 'TREASURER'].includes(mappedRole)) {
       alert('❌ Accès refusé. Page réservée aux validateurs.');
       router.push('/');
       return;

@@ -62,14 +62,17 @@ export default function EventBaremesPage() {
       return;
     }
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    const role = (userData as any)?.role;
-    const isAdmin = role === 'ADMIN' || role === 'admin_asso';
+    // Charger profil via RPC
+    const { data: userDataArray } = await supabase.rpc('get_current_user_safe');
+    
+    if (!userDataArray || !Array.isArray(userDataArray) || (userDataArray as any[]).length === 0) {
+      router.push('/auth/login');
+      return;
+    }
+    
+    const userData = (userDataArray as any[])[0];
+    const isAdmin = userData.role === 'admin_asso';
+    
     if (!isAdmin) {
       alert('❌ Accès refusé. Réservé aux Administrateurs.');
       router.push('/');

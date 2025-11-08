@@ -50,8 +50,8 @@ export default function ProfilePage() {
     // Charger le profil complet via RPC
     const { data: userData } = await supabase.rpc('get_current_user_safe');
     
-    if (userData && Array.isArray(userData) && userData.length > 0) {
-      const profileData = userData[0];
+    if (userData && Array.isArray(userData) && (userData as any[]).length > 0) {
+      const profileData = (userData as any[])[0];
       setProfile(profileData);
       setFirstName(profileData.first_name || '');
       setLastName(profileData.last_name || '');

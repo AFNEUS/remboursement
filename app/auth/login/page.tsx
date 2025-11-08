@@ -97,14 +97,10 @@ function AuthPageContent() {
         throw new Error('Utilisateur non trouvé');
       }
 
-      // Vérifier que le profil existe
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', data.user.id)
-        .single();
+      // Vérifier que le profil existe via RPC
+      const { data: profileArray } = await supabase.rpc('get_current_user_safe');
 
-      if (!profile) {
+      if (!profileArray || !Array.isArray(profileArray) || (profileArray as any[]).length === 0) {
         // Profil non créé, déconnecter
         await supabase.auth.signOut();
         setErrorMessage('❌ Profil non trouvé. Contactez un administrateur.');

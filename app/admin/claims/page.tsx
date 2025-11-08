@@ -25,12 +25,12 @@ export default function AdminClaimsPage() {
   async function checkAdmin() {
     // Check if user has admin role
     const { data } = await supabase.rpc('get_current_user_safe');
-    if (!data || !Array.isArray(data) || data.length === 0) {
+    if (!data || !Array.isArray(data) || (data as any[]).length === 0) {
       router.push('/');
       return;
     }
     
-    const user = data[0];
+    const user = (data as any[])[0];
     const roleMapping: Record<string, string> = {
       'admin_asso': 'ADMIN',
       'treasurer': 'TREASURER',

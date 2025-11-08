@@ -26,14 +26,17 @@ export default function AdminUsersPage() {
         return;
       }
 
-      // Charger profil actuel
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      // Charger profil actuel via RPC
+      const { data: userDataArray } = await supabase.rpc('get_current_user_safe');
+      
+      if (!userDataArray || !Array.isArray(userDataArray) || (userDataArray as any[]).length === 0) {
+        router.push('/auth/login');
+        return;
+      }
+      
+      const userData = (userDataArray as any[])[0];
 
-      if (!userData || (userData.role !== 'ADMIN' && userData.role !== 'admin_asso')) {
+      if (!userData || userData.role !== 'admin_asso') {
         alert('⛔ Accès refusé - Réservé aux administrateurs');
         router.push('/dashboard');
         return;
