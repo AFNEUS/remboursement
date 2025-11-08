@@ -32,7 +32,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadUser();
-    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -52,56 +51,35 @@ export default function DashboardPage() {
         return;
       }
 
-      console.log('🔍 Dashboard - Vérification session...');
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      if (sessionError) {
-        console.error('❌ Erreur session:', sessionError);
-        router.push('/auth/login?error=Session+invalide');
-        return;
-      }
-
-      if (!session) {
-        console.log('⚠️ Pas de session, redirection login');
+      if (sessionError || !session) {
         router.push('/auth/login');
         return;
       }
 
-      console.log('✅ Session active:', session.user.email);
-
-      // Attendre que le profil soit créé (retry jusqu'à 5 fois)
+      // Récupérer profil avec retry simple
       let userData = null;
       let attempts = 0;
       
-      while (!userData && attempts < 10) {
-        const { data, error } = await supabase.rpc('get_current_user_safe');
-        
+      while (!userData && attempts < 5) {
+        const { data } = await supabase.rpc('get_current_user_safe');
         if (data) {
           userData = data;
           break;
         }
-        
-        if (error && error.code !== 'PGRST116') {
-          console.error('❌ Erreur récupération profil:', error);
-          break;
-        }
-        
-        console.log(`⏳ Profil pas encore créé, retry ${attempts + 1}/10...`);
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
         attempts++;
       }
 
       if (!userData) {
-        console.error('❌ Utilisateur non trouvé après 10 tentatives');
-        router.push('/auth/login?error=Profil+non+trouvé');
+        router.push('/auth/login');
         return;
       }
 
-      console.log('✅ Profil chargé:', userData.email, userData.role);
       setUser(userData);
       setLoading(false);
     } catch (error) {
-      console.error('❌ Exception loadUser:', error);
       router.push('/auth/login');
     }
   }

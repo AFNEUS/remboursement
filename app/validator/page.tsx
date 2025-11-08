@@ -74,8 +74,14 @@ export default function ValidatorDashboard() {
   const fetchClaims = async () => {
     try {
       const { data, error } = await supabase
-        .from('claims_enriched')
-        .select('*')
+        .from('expense_claims')
+        .select(`
+          *,
+          users!expense_claims_user_id_fkey (
+            full_name,
+            email
+          )
+        `)
         .eq('status', filter)
         .order('created_at', { ascending: false });
       

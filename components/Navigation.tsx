@@ -21,12 +21,12 @@ export default function Navigation() {
     
     // S'abonner aux changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('🔄 Auth state changed:', _event, session?.user?.email);
       if (_event === 'SIGNED_OUT') {
         setUser(null);
         setUserRole(null);
+        setActiveRole(null);
         setProfileChecked(false);
-      } else if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
+      } else if (_event === 'SIGNED_IN') {
         checkUser();
       }
     });
@@ -52,7 +52,6 @@ export default function Navigation() {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
-        console.error('❌ Erreur getSession:', sessionError);
         setUser(null);
         setUserRole(null);
         setProfileChecked(true);
@@ -91,8 +90,7 @@ export default function Navigation() {
           setUserRole(mappedRole);
           setProfileChecked(true);
         } else if (!profileChecked) {
-          // SEULEMENT si jamais vérifié, tenter un sync UNIQUE
-          console.warn('⚠️ Première connexion: sync_current_user...');
+          // Première connexion: sync
           const { error: syncError } = await supabase.rpc('sync_current_user');
           setProfileChecked(true);
           
