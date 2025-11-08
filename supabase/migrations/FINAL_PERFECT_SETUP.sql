@@ -41,6 +41,7 @@ DROP TABLE IF EXISTS public.event_baremes CASCADE;
 DROP TABLE IF EXISTS public.events CASCADE;
 DROP TABLE IF EXISTS public.plafonds CASCADE;
 DROP TABLE IF EXISTS public.taux_remboursement CASCADE;
+DROP TABLE IF EXISTS public.train_baremes CASCADE;
 DROP TABLE IF EXISTS public.baremes CASCADE;
 DROP TABLE IF EXISTS public.expense_claims CASCADE;
 DROP TABLE IF EXISTS public.authorized_users CASCADE;
@@ -331,6 +332,31 @@ COMMENT ON TABLE public.baremes IS 'Barème kilométrique fiscal français par C
 COMMENT ON COLUMN public.baremes.rate_per_km IS 'Tarif €/km selon barème fiscal 2024';
 
 -- ---------------------------------------------------------------------
+-- 1.6b TABLE: train_baremes (distance-based intelligent)
+-- ---------------------------------------------------------------------
+CREATE TABLE public.train_baremes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    distance_min_km INTEGER NOT NULL CHECK (distance_min_km >= 0),
+    distance_max_km INTEGER NOT NULL CHECK (distance_max_km > distance_min_km),
+    percentage_refund INTEGER NOT NULL CHECK (percentage_refund >= 0 AND percentage_refund <= 100),
+    max_amount_euros DECIMAL(10,2),
+    description TEXT NOT NULL,
+    valid_from DATE NOT NULL DEFAULT CURRENT_DATE,
+    valid_to DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    
+    CONSTRAINT valid_period CHECK (valid_to IS NULL OR valid_from <= valid_to)
+);
+
+CREATE INDEX idx_train_baremes_distance ON public.train_baremes(distance_min_km, distance_max_km);
+CREATE INDEX idx_train_baremes_active ON public.train_baremes(valid_from) WHERE valid_to IS NULL;
+
+COMMENT ON TABLE public.train_baremes IS 'Barèmes train intelligents selon distance (Paris-Lyon ≠ Paris-Marseille)';
+COMMENT ON COLUMN public.train_baremes.percentage_refund IS 'Pourcentage remboursement du billet (0-100%)';
+COMMENT ON COLUMN public.train_baremes.max_amount_euros IS 'Plafond euros (NULL = sans limite)';
+
+-- ---------------------------------------------------------------------
 -- 1.7 TABLE: taux_remboursement (par rôle)
 -- ---------------------------------------------------------------------
 CREATE TABLE public.taux_remboursement (
@@ -503,6 +529,9 @@ CREATE TRIGGER trg_events_updated BEFORE UPDATE ON public.events
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 CREATE TRIGGER trg_event_baremes_updated BEFORE UPDATE ON public.event_baremes
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER trg_train_baremes_updated BEFORE UPDATE ON public.train_baremes
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- ---------------------------------------------------------------------
@@ -713,6 +742,55 @@ $$;
 
 COMMENT ON FUNCTION public.update_user_profile IS 'Mise à jour du profil utilisateur (nom, IBAN)';
 
+-- ---------------------------------------------------------------------
+-- 2.6 FONCTION: calculate_train_refund
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.calculate_train_refund(
+    p_distance_km INTEGER,
+    p_ticket_price DECIMAL(10,2)
+)
+RETURNS DECIMAL(10,2)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_percentage INTEGER;
+    v_max_amount DECIMAL(10,2);
+    v_calculated_amount DECIMAL(10,2);
+    v_final_amount DECIMAL(10,2);
+BEGIN
+    -- Trouver le barème applicable
+    SELECT percentage_refund, max_amount_euros
+    INTO v_percentage, v_max_amount
+    FROM public.train_baremes
+    WHERE p_distance_km >= distance_min_km
+      AND p_distance_km < distance_max_km
+      AND valid_to IS NULL
+    ORDER BY distance_min_km DESC
+    LIMIT 1;
+    
+    -- Si aucun barème trouvé, retourner 0
+    IF v_percentage IS NULL THEN
+        RETURN 0.00;
+    END IF;
+    
+    -- Calculer le montant basé sur le pourcentage
+    v_calculated_amount := p_ticket_price * (v_percentage::DECIMAL / 100.0);
+    
+    -- Appliquer le plafond si défini
+    IF v_max_amount IS NOT NULL THEN
+        v_final_amount := LEAST(v_calculated_amount, v_max_amount);
+    ELSE
+        v_final_amount := v_calculated_amount;
+    END IF;
+    
+    RETURN ROUND(v_final_amount, 2);
+END;
+$$;
+
+COMMENT ON FUNCTION public.calculate_train_refund IS 'Calcule le remboursement train basé sur la distance (Paris-Lyon ≠ Paris-Marseille)';
+
 -- =====================================================================
 -- PHASE 3: ROW LEVEL SECURITY (RLS)
 -- =====================================================================
@@ -895,6 +973,14 @@ CREATE POLICY plafonds_admin_write ON public.plafonds FOR ALL USING (
     EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin_asso')
 );
 
+-- Train baremes RLS
+ALTER TABLE public.train_baremes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY train_baremes_read_all ON public.train_baremes FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY train_baremes_admin_write ON public.train_baremes FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin_asso')
+);
+
 -- =====================================================================
 -- PHASE 4: DONNÉES INITIALES
 -- =====================================================================
@@ -907,11 +993,19 @@ INSERT INTO public.baremes (cv_fiscaux, rate_per_km) VALUES
     (4, 0.606),
     (5, 0.636),
     (6, 0.665),
-    (7, 0.697),
-    (8, 0.728),
-    (9, 0.759),
-    (10, 0.790)
+    (7, 0.697)
 ON CONFLICT (cv_fiscaux, valid_from) DO NOTHING;
+
+-- 7.2b Train baremes (distance-based)
+INSERT INTO public.train_baremes (distance_min_km, distance_max_km, percentage_refund, max_amount_euros, description) VALUES
+    (0, 100, 100, NULL, 'Courte distance (<100km) - 100% sans plafond'),
+    (100, 300, 100, NULL, 'Moyenne distance (100-300km) - 100% sans plafond'),
+    (300, 600, 90, 150.00, 'Longue distance (300-600km) - 90% max 150€'),
+    (600, 1000, 80, 200.00, 'Très longue distance (600-1000km) - 80% max 200€'),
+    (1000, 9999, 70, 250.00, 'Exceptionnel (>1000km) - 70% max 250€')
+ON CONFLICT DO NOTHING;
+
+-- 7.3 Taux par rôle
 
 -- ---------------------------------------------------------------------
 -- 4.2 Taux de remboursement par rôle
@@ -977,10 +1071,10 @@ BEGIN
     FROM pg_proc p
     JOIN pg_namespace n ON p.pronamespace = n.oid
     WHERE n.nspname = 'public'
-    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile');
+    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile', 'calculate_train_refund');
     
-    IF functions_count < 5 THEN
-        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 5', functions_count;
+    IF functions_count < 6 THEN
+        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 6', functions_count;
     END IF;
     
     -- Vérifier policies RLS
@@ -1023,6 +1117,7 @@ END $$;
 -- - Table users SANS RLS → accès via RPC get_current_user_safe()
 -- - Roles en lowercase en DB (admin_asso) → mapping UI (ADMIN)
 -- - Events utilise UNIQUEMENT start_date/end_date (pas de doublon)
--- - Barèmes simplifiés: une ligne par CV avec rate_per_km unique
+-- - Barèmes voiture: cv_fiscaux + rate_per_km unique
+-- - Barèmes train: distance-based intelligent avec plafonds
 -- 
 -- =====================================================================

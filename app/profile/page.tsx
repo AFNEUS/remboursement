@@ -17,6 +17,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     loadUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadUser() {
@@ -46,21 +47,23 @@ export default function ProfilePage() {
       return;
     }
 
-    // Charger le profil complet
-    const { data: profileData } = await supabase
-      .from('user_profile')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (profileData) {
+    // Charger le profil complet via RPC
+    const { data: userData } = await supabase.rpc('get_current_user_safe');
+    
+    if (userData && Array.isArray(userData) && userData.length > 0) {
+      const profileData = userData[0];
       setProfile(profileData);
-      setFirstName((profileData as any).first_name || '');
-      setLastName((profileData as any).last_name || '');
-      setIban((profileData as any).iban || '');
+      setFirstName(profileData.first_name || '');
+      setLastName(profileData.last_name || '');
+      setIban(profileData.iban || '');
+      setUser({
+        ...user,
+        ...profileData
+      });
+    } else {
+      setUser(user);
     }
 
-    setUser(user);
     setLoading(false);
   }
 

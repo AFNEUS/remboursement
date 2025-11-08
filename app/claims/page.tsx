@@ -9,9 +9,10 @@ export default function MyClaimsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
 
-  useEffect(() => {
+    useEffect(() => {
     fetchMyClaims();
-  }, [filter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchMyClaims = async () => {
     setLoading(true);

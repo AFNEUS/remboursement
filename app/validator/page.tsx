@@ -18,12 +18,14 @@ export default function ValidatorDashboard() {
   
   useEffect(() => {
     checkAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (user) {
       fetchClaims();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, user]);
 
   async function checkAccess() {

@@ -2,17 +2,59 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 
 export default function TreasurerDashboard() {
+  const router = useRouter();
   const [claims, setClaims] = useState<any[]>([]);
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    fetchValidatedClaims();
+    checkAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function checkAccess() {
+    const testUser = localStorage.getItem('test_user');
+    if (testUser) {
+      const parsedUser = JSON.parse(testUser);
+      if (!['ADMIN', 'TREASURER'].includes(parsedUser.role)) {
+        alert('❌ Accès refusé. Page réservée aux trésoriers.');
+        router.push('/');
+        return;
+      }
+      fetchValidatedClaims();
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert('❌ Vous devez être connecté.');
+      router.push('/');
+      return;
+    }
+
+    const { data: userData } = await supabase.rpc('get_current_user_safe');
+    const roleMap: Record<string, string> = {
+      'admin_asso': 'ADMIN',
+      'treasurer': 'TREASURER',
+      'validator': 'VALIDATOR',
+      'bn_member': 'BN',
+      'user': 'MEMBER'
+    };
+    const mappedRole = userData && userData[0] ? roleMap[userData[0].role] || userData[0].role : null;
+
+    if (!userData || !['ADMIN', 'TREASURER'].includes(mappedRole || '')) {
+      alert('❌ Accès refusé. Page réservée aux trésoriers.');
+      router.push('/');
+      return;
+    }
+
+    fetchValidatedClaims();
+  }
 
   const fetchValidatedClaims = async () => {
     setLoading(true);

@@ -105,6 +105,57 @@ export default function AdminDashboard() {
           </ul>
         </div>
 
+        {/* Barèmes Train */}
+        <div 
+          onClick={() => router.push('/admin/train-baremes')}
+          className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg shadow-lg p-6 cursor-pointer hover:scale-105 transition-transform text-white"
+        >
+          <div className="text-4xl mb-4">🚄</div>
+          <h2 className="text-2xl font-bold mb-2">Barèmes Train</h2>
+          <p className="text-purple-100 mb-4">
+            Remboursement intelligent basé sur la distance (Paris-Lyon ≠ Paris-Marseille)
+          </p>
+          <ul className="text-sm text-purple-100 space-y-1">
+            <li>✓ Pourcentage selon distance</li>
+            <li>✓ Plafonds configurables</li>
+            <li>✓ Calcul automatique</li>
+          </ul>
+        </div>
+
+        {/* Événements */}
+        <div 
+          onClick={() => router.push('/admin/events')}
+          className="bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg shadow-lg p-6 cursor-pointer hover:scale-105 transition-transform text-white"
+        >
+          <div className="text-4xl mb-4">📅</div>
+          <h2 className="text-2xl font-bold mb-2">Gestion des Événements</h2>
+          <p className="text-cyan-100 mb-4">
+            Créez et gérez les événements (Congrès, Week-end passation, Formations...)
+          </p>
+          <ul className="text-sm text-cyan-100 space-y-1">
+            <li>✓ Dates et lieux</li>
+            <li>✓ Types d&apos;événements</li>
+            <li>✓ Plafonds spécifiques</li>
+          </ul>
+        </div>
+
+        {/* Barèmes par Événement */}
+        <div 
+          onClick={() => router.push('/admin/event-baremes')}
+          className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg shadow-lg p-6 cursor-pointer hover:scale-105 transition-transform text-white"
+        >
+          <div className="text-4xl mb-4">🎯</div>
+          <h2 className="text-2xl font-bold mb-2">Barèmes par Événement</h2>
+          <p className="text-teal-100 mb-4">
+            Configurez les barèmes spécifiques pour chaque événement (train, avion, covoiturage, hébergement)
+          </p>
+          <ul className="text-sm text-teal-100 space-y-1">
+            <li>✓ Taux BN / Admin / Autres</li>
+            <li>✓ Prix SNCF automatiques</li>
+            <li>✓ Plafonds par type</li>
+          </ul>
+        </div>
+
         {/* Validation */}
         <div 
           onClick={() => router.push('/validator')}

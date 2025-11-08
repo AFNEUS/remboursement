@@ -14,30 +14,57 @@ export default function AdminClaimsPage() {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
-  const [type, setType] = useState('CAR');
+  const [type, setType] = useState('car');
 
   useEffect(() => {
     checkAdmin();
-    loadUsers();
+    loadBNMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function checkAdmin() {
-    const role = localStorage.getItem('test_role');
-    if (role !== 'treasurer') {
+  async function checkAdmin() {
+    // Check if user has admin role
+    const { data } = await supabase.rpc('get_current_user_safe');
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      router.push('/');
+      return;
+    }
+    
+    const user = data[0];
+    const roleMapping: Record<string, string> = {
+      'admin_asso': 'ADMIN',
+      'treasurer': 'TREASURER',
+      'validator': 'VALIDATOR',
+      'bn_member': 'BN',
+      'user': 'MEMBER',
+    };
+    
+    const role = roleMapping[user.role] || 'MEMBER';
+    if (role !== 'ADMIN') {
+      alert('⛔ Accès refusé - Réservé aux administrateurs');
       router.push('/');
     }
   }
 
-  async function loadUsers() {
-    // Charger les utilisateurs depuis localStorage pour le mode test
-    const testUsers = [
-      { id: 'test-user-123', email: 'test@afneus.fr', name: 'Utilisateur Test' },
-      { id: 'test-admin-456', email: 'admin@afneus.fr', name: 'Admin Test' },
-      { id: 'user-1', email: 'marie.dupont@afneus.fr', name: 'Marie Dupont' },
-      { id: 'user-2', email: 'jean.martin@afneus.fr', name: 'Jean Martin' },
-      { id: 'user-3', email: 'sophie.bernard@afneus.fr', name: 'Sophie Bernard' },
-    ];
-    setUsers(testUsers);
+  async function loadBNMembers() {
+    try {
+      // Fetch only BN members from the database
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name, full_name, role')
+        .eq('role', 'bn_member')
+        .order('full_name');
+
+      if (error) {
+        console.error('Error loading BN members:', error);
+        alert('Erreur lors du chargement des membres BN');
+        return;
+      }
+
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error in loadBNMembers:', error);
+    }
   }
 
   async function handleCreateClaim() {
@@ -53,31 +80,38 @@ export default function AdminClaimsPage() {
         motive,
         total_amount: parseFloat(amount),
         status: 'draft',
-        created_at: date,
-        type,
+        expense_type: type.toLowerCase(), // Ensure lowercase
         description,
+        expense_date: date,
       };
 
-      // Pour le mode test, on sauvegarde dans localStorage
-      const existingClaims = JSON.parse(localStorage.getItem('admin_created_claims') || '[]');
-      const newClaim = {
-        ...claimData,
-        id: Date.now().toString(),
-        created_by_admin: true,
-      };
-      existingClaims.push(newClaim);
-      localStorage.setItem('admin_created_claims', JSON.stringify(existingClaims));
+      // Insert into database
+      const { data, error } = await supabase
+        .from('expense_claims')
+        .insert([claimData])
+        .select();
 
-      alert('✅ Demande créée avec succès pour ' + users.find(u => u.id === selectedUser)?.name);
+      if (error) {
+        throw error;
+      }
+
+      const selectedUserData = users.find(u => u.id === selectedUser);
+      const userName = selectedUserData?.full_name || 
+                       `${selectedUserData?.first_name} ${selectedUserData?.last_name}`.trim() || 
+                       selectedUserData?.email || 'Membre';
       
-      // Reset
+      alert(`✅ Demande créée avec succès pour ${userName}`);
+      
+      // Reset form
       setSelectedUser('');
       setMotive('');
       setAmount('');
       setDescription('');
+      setType('car');
       setDate(new Date().toISOString().split('T')[0]);
     } catch (error: any) {
-      alert('❌ Erreur : ' + error.message);
+      console.error('Error creating claim:', error);
+      alert('❌ Erreur : ' + (error.message || 'Une erreur est survenue'));
     } finally {
       setLoading(false);
     }
@@ -102,19 +136,24 @@ export default function AdminClaimsPage() {
       <div className="bg-white rounded-lg shadow-lg p-8">
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-semibold mb-2">Membre concerné *</label>
+            <label className="block text-sm font-semibold mb-2">Membre BN concerné *</label>
             <select
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
               className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">-- Sélectionnez un membre --</option>
+              <option value="">-- Sélectionnez un membre BN --</option>
               {users.map(user => (
                 <option key={user.id} value={user.id}>
-                  {user.name} ({user.email})
+                  {user.full_name || `${user.first_name} ${user.last_name}`.trim() || user.email} ({user.email})
                 </option>
               ))}
             </select>
+            {users.length === 0 && (
+              <p className="text-sm text-gray-500 mt-2">
+                Aucun membre BN trouvé. Vérifiez que des utilisateurs ont le rôle &apos;bn_member&apos;.
+              </p>
+            )}
           </div>
 
           <div>
@@ -137,12 +176,13 @@ export default function AdminClaimsPage() {
               onChange={(e) => setType(e.target.value)}
               className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="CAR">🚗 Frais kilométriques</option>
-              <option value="TRAIN">🚄 Train</option>
-              <option value="BUS">🚌 Bus</option>
-              <option value="MEAL">🍽️ Repas</option>
-              <option value="HOTEL">🏨 Hôtel</option>
-              <option value="OTHER">📄 Autre</option>
+              <option value="car">🚗 Frais kilométriques</option>
+              <option value="train">🚄 Train</option>
+              <option value="transport">🚌 Transport</option>
+              <option value="meal">🍽️ Repas</option>
+              <option value="hotel">🏨 Hôtel</option>
+              <option value="registration">📝 Inscription</option>
+              <option value="other">📄 Autre</option>
             </select>
           </div>
 

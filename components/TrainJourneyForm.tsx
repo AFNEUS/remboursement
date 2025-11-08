@@ -43,6 +43,7 @@ export default function TrainJourneyForm({ onJourneyChange, initialDate }: Train
   useEffect(() => {
     // Notifier le parent à chaque changement
     onJourneyChange(segments, journeyType === 'round-trip');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments, journeyType]);
 
   // Recherche de gare SNCF via l'API

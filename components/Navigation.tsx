@@ -11,6 +11,7 @@ export default function Navigation() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [activeRole, setActiveRole] = useState<string | null>(null); // Rôle actif pour la vue
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
@@ -31,6 +32,7 @@ export default function Navigation() {
     });
     
     return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkUser() {
@@ -146,20 +148,45 @@ export default function Navigation() {
     setLoading(false);
   }
 
-  async function handleLogout() {
-    localStorage.removeItem('test_user');
+    async function handleLogout() {
     await supabase.auth.signOut();
+    localStorage.removeItem('test_user');
     setUser(null);
     setUserRole(null);
+    setActiveRole(null);
     router.push('/');
     setTimeout(() => router.refresh(), 100);
   }
 
-  // Permissions
-  const canAccessDashboard = userRole && ['ADMIN', 'TREASURER', 'VALIDATOR'].includes(userRole);
-  const canValidate = userRole && ['ADMIN', 'VALIDATOR', 'TREASURER'].includes(userRole);
-  const canAccessTreasurer = userRole && ['ADMIN', 'TREASURER'].includes(userRole);
-  const isAdmin = userRole === 'ADMIN';
+  function switchRole(role: string) {
+    setActiveRole(role);
+    // Rediriger vers la page d'accueil du nouveau rôle
+    if (role === 'ADMIN') {
+      router.push('/admin');
+    } else if (role === 'VALIDATOR') {
+      router.push('/validator');
+    } else if (role === 'TREASURER') {
+      router.push('/treasurer');
+    } else {
+      router.push('/dashboard');
+    }
+  }
+
+  // Synchroniser activeRole avec userRole
+  useEffect(() => {
+    if (userRole && !activeRole) {
+      setActiveRole(userRole);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole]);
+
+  // Permissions basées sur le rôle actif (vue courante)
+  const effectiveRole = activeRole || userRole;
+  const canAccessDashboard = effectiveRole && ['ADMIN', 'TREASURER', 'VALIDATOR'].includes(effectiveRole);
+  const canValidate = effectiveRole && ['ADMIN', 'VALIDATOR', 'TREASURER'].includes(effectiveRole);
+  const canAccessTreasurer = effectiveRole && ['ADMIN', 'TREASURER'].includes(effectiveRole);
+  const isAdmin = userRole === 'ADMIN'; // Vrai rôle pour afficher le switch
+  const isViewingAsAdmin = effectiveRole === 'ADMIN';
 
   const isActive = (path: string) => pathname === path;
 
@@ -265,6 +292,23 @@ export default function Navigation() {
               )}
 
               {/* Profil dropdown */}
+              {/* Switch de rôle (admin only) */}
+              {isAdmin && (
+                <div className="relative ml-2">
+                  <select
+                    value={activeRole || ''}
+                    onChange={(e) => switchRole(e.target.value)}
+                    className="px-3 py-2 rounded-lg font-semibold bg-white/20 text-white border border-white/30 hover:bg-white/30 transition cursor-pointer"
+                    title="Changer de vue"
+                  >
+                    <option value="ADMIN" className="text-gray-900">👑 Vue Admin</option>
+                    <option value="VALIDATOR" className="text-gray-900">✅ Vue Validateur</option>
+                    <option value="TREASURER" className="text-gray-900">💰 Vue Trésorier</option>
+                    <option value="MEMBER" className="text-gray-900">👥 Vue Membre</option>
+                  </select>
+                </div>
+              )}
+
               <div className="relative ml-2">
                 <button
                   onClick={() => router.push('/profile')}

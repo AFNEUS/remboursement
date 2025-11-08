@@ -10,6 +10,7 @@ export default function CallbackHandler() {
 
   useEffect(() => {
     handleCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleCallback() {

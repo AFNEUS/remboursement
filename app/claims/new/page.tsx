@@ -57,6 +57,8 @@ export default function NewClaimPage() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [motive, setMotive] = useState('');
+  const [events, setEvents] = useState<any[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [currentExpense, setCurrentExpense] = useState<Partial<ExpenseItem>>({
     type: 'CAR',
@@ -79,7 +81,9 @@ export default function NewClaimPage() {
   
   useEffect(() => {
     loadUser();
-    loadTarifs();
+    loadEvents();
+    loadBaremes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   function loadTarifs() {
@@ -111,6 +115,21 @@ export default function NewClaimPage() {
     setCheckingAuth(false);
   }
   
+  async function loadEvents() {
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('start_date', { ascending: false })
+        .limit(20);
+      
+      if (error) throw error;
+      setEvents(data || []);
+    } catch (error) {
+      console.error('Erreur chargement événements:', error);
+    }
+  }
+  
   function handleCitySearch(value: string, isDepart: boolean) {
     if (value.length >= 2) {
       setCitySuggestions(searchCities(value));
@@ -127,7 +146,7 @@ export default function NewClaimPage() {
   
   // Calcul automatique pour frais kilométriques
   useEffect(() => {
-    if (currentExpense.type === 'CAR' && distance && departure && arrival) {
+    if (currentExpense.type === 'car' && distance && departure && arrival) {
       const km = parseFloat(distance);
       const power = parseInt(fiscalPower);
       const nbPassengers = (currentExpense.passengers?.length || 0) + 1; // +1 pour le conducteur
@@ -152,7 +171,7 @@ export default function NewClaimPage() {
   
   // Recalcul quand on ajoute/retire des passagers
   useEffect(() => {
-    if (currentExpense.type === 'CAR' && currentExpense.theoreticalMax) {
+    if (currentExpense.type === 'car' && currentExpense.theoreticalMax) {
       const nbPassengers = (currentExpense.passengers?.length || 0) + 1;
       const amountPerPerson = currentExpense.theoreticalMax / nbPassengers;
       setCurrentExpense(prev => ({
@@ -199,7 +218,7 @@ export default function NewClaimPage() {
     }
     
     // Vérifications spécifiques
-    if (currentExpense.type === 'CAR' && (!currentExpense.fuelReceipt || !currentExpense.tollReceipt)) {
+    if (currentExpense.type === 'car' && (!currentExpense.fuelReceipt || !currentExpense.tollReceipt)) {
       if (!confirm('⚠️ Il manque des justificatifs (essence ou péage). Continuer quand même ?')) {
         return;
       }
@@ -242,7 +261,7 @@ export default function NewClaimPage() {
   }
   
   function getTheoreticalMax(type: ExpenseType): number {
-    if (type === 'CAR' && currentExpense.theoreticalMax) {
+    if (type === 'car' && currentExpense.theoreticalMax) {
       return currentExpense.theoreticalMax;
     }
     
@@ -274,9 +293,21 @@ export default function NewClaimPage() {
     try {
       const total = expenses.reduce((sum, e) => sum + e.amount, 0);
       
+      const claimData: any = {
+        user_id: user.id,
+        motive,
+        total_amount: total,
+        status: 'draft',
+      };
+      
+      // Ajouter l'event_id si un événement est sélectionné
+      if (selectedEvent) {
+        claimData.event_id = selectedEvent;
+      }
+      
       const { data: claim, error } = await supabase
         .from('expense_claims')
-        .insert({ user_id: user.id, motive, total_amount: total, status: 'draft' })
+        .insert(claimData)
         .select()
         .single();
       
@@ -335,16 +366,22 @@ export default function NewClaimPage() {
           </div>
           
           <div>
-            <label className="block text-sm font-semibold mb-2">Type d&apos;événement</label>
+            <label className="block text-sm font-semibold mb-2">Événement lié (optionnel)</label>
             <select
+              value={selectedEvent}
+              onChange={(e) => setSelectedEvent(e.target.value)}
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Sélectionnez un type</option>
-              {EVENT_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
+              <option value="">Aucun événement / Frais hors événement</option>
+              {events.map(event => (
+                <option key={event.id} value={event.id}>
+                  {event.name} ({new Date(event.start_date).toLocaleDateString('fr-FR')})
+                </option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">Pour statistiques et comptabilité</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {selectedEvent ? '🎯 Les barèmes de l&apos;événement seront appliqués' : 'Les barèmes standards seront appliqués'}
+            </p>
           </div>
         </div>
       </div>
@@ -378,7 +415,7 @@ export default function NewClaimPage() {
         </div>
         
         {/* FRAIS KILOMÉTRIQUES */}
-        {currentExpense.type === 'CAR' && (
+        {currentExpense.type === 'car' && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
             <h3 className="font-semibold mb-3 text-blue-900">🚗 Configuration du trajet</h3>
             
@@ -590,7 +627,7 @@ export default function NewClaimPage() {
         )}
         
         {/* TRAIN */}
-        {currentExpense.type === 'TRAIN' && (
+        {currentExpense.type === 'train' && (
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
             <h3 className="font-semibold mb-3 text-purple-900">🚄 Informations du trajet train</h3>
             
@@ -664,7 +701,7 @@ export default function NewClaimPage() {
         )}
         
         {/* BUS */}
-        {currentExpense.type === 'BUS' && (
+        {currentExpense.type === 'transport' && (
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
             <h3 className="font-semibold mb-3 text-orange-900">🚌 Informations du trajet</h3>
             
@@ -729,7 +766,7 @@ export default function NewClaimPage() {
         )}
         
         {/* REPAS */}
-        {currentExpense.type === 'MEAL' && (
+        {currentExpense.type === 'meal' && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
             <h3 className="font-semibold mb-3 text-yellow-900">🍽️ Frais de repas</h3>
             
@@ -773,7 +810,7 @@ export default function NewClaimPage() {
         )}
         
         {/* HOTEL */}
-        {currentExpense.type === 'HOTEL' && (
+        {currentExpense.type === 'hotel' && (
           <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 mb-4">
             <h3 className="font-semibold mb-3 text-pink-900">🏨 Hébergement</h3>
             
@@ -820,7 +857,7 @@ export default function NewClaimPage() {
         )}
         
         {/* AUTRE */}
-        {currentExpense.type === 'OTHER' && (
+        {currentExpense.type === 'other' && (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
             <div className="mb-4">
               <label className="block text-sm font-semibold mb-2">Description *</label>

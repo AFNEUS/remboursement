@@ -40,6 +40,7 @@ export default function EventBaremesPage() {
 
   useEffect(() => {
     checkAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkAccess() {
@@ -494,6 +495,7 @@ function StatsRecap({ eventId }: { eventId: string }) {
 
   useEffect(() => {
     loadStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
   async function loadStats() {

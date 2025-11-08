@@ -40,6 +40,8 @@ export default function EventsAdminPage() {
 
   useEffect(() => {
     loadUser();
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
