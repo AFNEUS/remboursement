@@ -94,7 +94,7 @@ export default function AdminClaimsPage() {
 
       <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
         <p className="text-sm text-yellow-800">
-          <strong>⚠️ Mode Admin :</strong> Vous pouvez créer des demandes au nom de n'importe quel membre,
+          <strong>⚠️ Mode Admin :</strong> Vous pouvez créer des demandes au nom de n&apos;importe quel membre,
           même pour des événements passés. Ces demandes seront marquées comme créées par un administrateur.
         </p>
       </div>
@@ -126,7 +126,7 @@ export default function AdminClaimsPage() {
               className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Vous pouvez sélectionner n'importe quelle date, y compris passée
+              Vous pouvez sélectionner n&apos;importe quelle date, y compris passée
             </p>
           </div>
 

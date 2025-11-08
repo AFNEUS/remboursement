@@ -300,7 +300,7 @@ export default function EventBaremesPage() {
                     <strong>Trajet:</strong> {selectedEventData.departure_city} → {selectedEventData.location}
                   </p>
                   <p className="mb-2">
-                    <strong>Date recherche:</strong> 2 semaines avant l'événement ({new Date(new Date(selectedEventData.start_date).setDate(new Date(selectedEventData.start_date).getDate() - 14)).toLocaleDateString('fr-FR')})
+                    <strong>Date recherche:</strong> 2 semaines avant l&apos;événement ({new Date(new Date(selectedEventData.start_date).setDate(new Date(selectedEventData.start_date).getDate() - 14)).toLocaleDateString('fr-FR')})
                   </p>
                   <p className="text-xs text-gray-500">
                     Le système va rechercher les prix moyens des billets train tarif jeune pour calculer automatiquement les barèmes BN/Admin/Autres
@@ -342,7 +342,7 @@ export default function EventBaremesPage() {
             ) : (
               <div className="p-4 bg-yellow-50 border border-yellow-200 rounded">
                 <p className="text-sm text-yellow-800">
-                  ⚠️ Pour utiliser le calcul automatique, configurez la <strong>ville de départ</strong> et la <strong>destination</strong> de l'événement dans la page Événements.
+                  ⚠️ Pour utiliser le calcul automatique, configurez la <strong>ville de départ</strong> et la <strong>destination</strong> de l&apos;événement dans la page Événements.
                 </p>
               </div>
             )}
@@ -531,7 +531,7 @@ function StatsRecap({ eventId }: { eventId: string }) {
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-bold mb-4">📈 Statistiques de l'événement</h2>
+      <h2 className="text-xl font-bold mb-4">📈 Statistiques de l&apos;événement</h2>
       <div className="grid md:grid-cols-4 gap-4">
         <div className="p-4 bg-blue-50 rounded">
           <p className="text-sm text-gray-600">Total demandes</p>

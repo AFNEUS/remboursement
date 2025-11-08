@@ -75,7 +75,7 @@ export default function BaremesAdminPage() {
 
       <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
         <p className="text-sm text-yellow-800">
-          <strong>ℹ️ Information :</strong> Les barèmes kilométriques incluent tous les frais liés à l'utilisation du véhicule 
+          <strong>ℹ️ Information :</strong> Les barèmes kilométriques incluent tous les frais liés à l&apos;utilisation du véhicule 
           (carburant, assurance, entretien, amortissement). Les taux sont exprimés en € par kilomètre.
         </p>
       </div>

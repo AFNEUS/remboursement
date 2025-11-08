@@ -235,7 +235,7 @@ export default function TrainJourneyForm({ onJourneyChange, initialDate }: Train
 
             {/* Gare d'arrivée */}
             <div className="relative">
-              <label className="block text-sm font-medium mb-1">Gare d'arrivée *</label>
+              <label className="block text-sm font-medium mb-1">Gare d&apos;arrivée *</label>
               <input
                 type="text"
                 value={segment.to}

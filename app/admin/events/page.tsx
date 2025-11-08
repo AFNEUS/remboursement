@@ -237,7 +237,7 @@ export default function EventsAdminPage() {
             {/* Informations de base */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-semibold mb-2">Nom de l'événement *</label>
+                <label className="block text-sm font-semibold mb-2">Nom de l&apos;événement *</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -249,7 +249,7 @@ export default function EventsAdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Type d'événement *</label>
+                <label className="block text-sm font-semibold mb-2">Type d&apos;événement *</label>
                 <select
                   value={formData.event_type}
                   onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}

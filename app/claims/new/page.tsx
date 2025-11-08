@@ -335,7 +335,7 @@ export default function NewClaimPage() {
           </div>
           
           <div>
-            <label className="block text-sm font-semibold mb-2">Type d'événement</label>
+            <label className="block text-sm font-semibold mb-2">Type d&apos;événement</label>
             <select
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
@@ -499,7 +499,7 @@ export default function NewClaimPage() {
             <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
               <h4 className="font-semibold mb-2">👥 Covoiturage (optionnel)</h4>
               <p className="text-sm text-gray-600 mb-3">
-                Si d'autres membres étaient dans votre véhicule, ajoutez-les. Le montant sera divisé équitablement.
+                Si d&apos;autres membres étaient dans votre véhicule, ajoutez-les. Le montant sera divisé équitablement.
               </p>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
@@ -779,7 +779,7 @@ export default function NewClaimPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-semibold mb-2">Nom de l'hôtel *</label>
+                <label className="block text-sm font-semibold mb-2">Nom de l&apos;hôtel *</label>
                 <input
                   type="text"
                   value={currentExpense.description || ''}
@@ -808,7 +808,7 @@ export default function NewClaimPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-semibold mb-2">Facture de l'hôtel *</label>
+              <label className="block text-sm font-semibold mb-2">Facture de l&apos;hôtel *</label>
               <input
                 type="file"
                 onChange={handleFileUpload}

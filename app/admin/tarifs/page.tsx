@@ -200,7 +200,7 @@ export default function TarifsAdminPage() {
       </div>
 
       <div className="mt-4 text-sm text-gray-500">
-        <p>💡 <strong>Astuce :</strong> Les modifications sont sauvegardées localement et s'appliquent immédiatement.</p>
+        <p>💡 <strong>Astuce :</strong> Les modifications sont sauvegardées localement et s&apos;appliquent immédiatement.</p>
         <p>⚙️ Pour modifier les barèmes kilométriques, utilisez la page <a href="/admin/baremes" className="text-blue-600 underline">Barèmes</a>.</p>
       </div>
     </div>

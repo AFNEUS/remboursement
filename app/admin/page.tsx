@@ -62,7 +62,7 @@ export default function AdminDashboard() {
           <div className="text-4xl mb-4">📝</div>
           <h2 className="text-2xl font-bold mb-2">Créer une Demande</h2>
           <p className="text-red-100 mb-4">
-            Créez une demande de remboursement au nom de n'importe quel membre, même pour des dates passées
+            Créez une demande de remboursement au nom de n&apos;importe quel membre, même pour des dates passées
           </p>
           <ul className="text-sm text-red-100 space-y-1">
             <li>✓ Sélection du membre</li>

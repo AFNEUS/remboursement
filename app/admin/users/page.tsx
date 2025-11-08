@@ -231,7 +231,7 @@ export default function AdminUsersPage() {
                           {user.first_name} {user.last_name}
                         </div>
                         {user.id === currentUser?.id && (
-                          <div className="text-xs text-indigo-600 font-medium">✨ C'est vous</div>
+                          <div className="text-xs text-indigo-600 font-medium">✨ C&apos;est vous</div>
                         )}
                       </div>
                     </div>
