@@ -36,14 +36,10 @@ export default function CallbackHandler() {
       while (!profile && attempts < 6) {
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        const { data } = await supabase.rpc('get_current_user_safe');
         
-        if (data) {
-          profile = data;
+        if (data && data.length > 0) {
+          profile = data[0];
           break;
         }
         attempts++;
@@ -53,28 +49,13 @@ export default function CallbackHandler() {
         console.error('❌ Profil non créé par trigger, création manuelle...');
         setStatus('Création du profil...');
         
-        // Fallback: créer manuellement avec RPC
-        const fullName = session.user.user_metadata?.full_name || 
-                        session.user.user_metadata?.name || 
-                        session.user.email!.split('@')[0];
-        const nameParts = fullName.split(' ');
-        
-        // @ts-ignore
-        await supabase.rpc('create_user_profile', {
-          user_id: session.user.id,
-          user_email: session.user.email!,
-          user_first_name: nameParts[0] || 'User',
-          user_last_name: nameParts.slice(1).join(' ') || nameParts[0],
-        });
+        // Fallback: appeler sync_current_user
+        await supabase.rpc('sync_current_user');
 
-        // Recharger le profil
-        const { data: newProfile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        // Recharger le profil via RPC
+        const { data: newProfile } = await supabase.rpc('get_current_user_safe');
         
-        profile = newProfile;
+        profile = newProfile && (newProfile as any).length > 0 ? (newProfile as any)[0] : null;
       }
 
       if (profile) {

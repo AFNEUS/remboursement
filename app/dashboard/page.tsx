@@ -72,11 +72,7 @@ export default function DashboardPage() {
       let attempts = 0;
       
       while (!userData && attempts < 10) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        const { data, error } = await supabase.rpc('get_current_user_safe');
         
         if (data) {
           userData = data;
@@ -143,8 +139,8 @@ export default function DashboardPage() {
       const { data: recentEvents } = await supabase
         .from('event_statistics')
         .select('*')
-        .gte('date_start', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
-        .order('date_start', { ascending: false })
+        .gte('start_date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+        .order('start_date', { ascending: false })
         .limit(5);
 
       setData({
@@ -384,7 +380,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-xs text-gray-600 mb-3">
                     📍 {event.location || 'Non précisé'}<br/>
-                    📅 {formatDate(event.date_start)} {event.date_end !== event.date_start && `→ ${formatDate(event.date_end)}`}
+                    📅 {formatDate(event.start_date)} {event.end_date !== event.start_date && `→ ${formatDate(event.end_date)}`}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>

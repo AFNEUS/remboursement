@@ -39,11 +39,7 @@ export default function Home() {
 
       setUser(user);
       
-      const { data: userData, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      const { data: userData, error: profileError } = await supabase.rpc('get_current_user_safe');
 
       if (!profileError && userData) {
         setUserProfile(userData);

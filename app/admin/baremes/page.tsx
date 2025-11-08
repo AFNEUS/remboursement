@@ -5,12 +5,11 @@ import { supabase } from '@/lib/supabase/client';
 
 interface Bareme {
   id: string;
-  fiscal_power: number;
-  rate_0_5000: number;
-  rate_5001_20000: number;
-  rate_20001_plus: number;
-  effective_from: string;
-  active: boolean;
+  cv_fiscaux: number;
+  rate_per_km: number;
+  valid_from: string;
+  valid_to: string | null;
+  created_at: string;
 }
 
 export default function BaremesAdminPage() {
@@ -27,22 +26,23 @@ export default function BaremesAdminPage() {
     const { data, error } = await supabase
       .from('baremes')
       .select('*')
-      .order('fiscal_power', { ascending: true });
+      .is('valid_to', null)
+      .order('cv_fiscaux', { ascending: true });
     
     if (data) setBaremes(data);
     setLoading(false);
   }
 
   async function handleSave() {
-    if (!editing || !formData.rate_0_5000 || !formData.rate_5001_20000 || !formData.rate_20001_plus) return;
+    if (!editing || !formData.rate_per_km) return;
+
+    const updateData: Partial<Bareme> = {
+      rate_per_km: formData.rate_per_km,
+    };
 
     const { error } = await supabase
       .from('baremes')
-      .update({
-        rate_0_5000: formData.rate_0_5000,
-        rate_5001_20000: formData.rate_5001_20000,
-        rate_20001_plus: formData.rate_20001_plus,
-      } as never)
+      .update(updateData as any)
       .eq('id', editing);
 
     if (!error) {
@@ -91,13 +91,7 @@ export default function BaremesAdminPage() {
                 Puissance fiscale
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                0 à 5 000 km
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                5 001 à 20 000 km
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                + de 20 000 km
+                Taux par km (€)
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
@@ -108,45 +102,19 @@ export default function BaremesAdminPage() {
             {baremes.map((bareme) => (
               <tr key={bareme.id} className={editing === bareme.id ? 'bg-blue-50' : ''}>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm font-medium text-gray-900">{bareme.fiscal_power} CV</span>
+                  <span className="text-sm font-medium text-gray-900">{bareme.cv_fiscaux} CV</span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {editing === bareme.id ? (
                     <input
                       type="number"
                       step="0.001"
-                      value={formData.rate_0_5000}
-                      onChange={(e) => setFormData({ ...formData, rate_0_5000: parseFloat(e.target.value) })}
-                      className="w-24 px-2 py-1 border rounded"
+                      value={formData.rate_per_km}
+                      onChange={(e) => setFormData({ ...formData, rate_per_km: parseFloat(e.target.value) })}
+                      className="w-32 px-2 py-1 border rounded"
                     />
                   ) : (
-                    <span className="text-sm text-gray-900">{bareme.rate_0_5000?.toFixed(3)} €</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {editing === bareme.id ? (
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={formData.rate_5001_20000}
-                      onChange={(e) => setFormData({ ...formData, rate_5001_20000: parseFloat(e.target.value) })}
-                      className="w-24 px-2 py-1 border rounded"
-                    />
-                  ) : (
-                    <span className="text-sm text-gray-900">{bareme.rate_5001_20000?.toFixed(3)} €</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {editing === bareme.id ? (
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={formData.rate_20001_plus}
-                      onChange={(e) => setFormData({ ...formData, rate_20001_plus: parseFloat(e.target.value) })}
-                      className="w-24 px-2 py-1 border rounded"
-                    />
-                  ) : (
-                    <span className="text-sm text-gray-900">{bareme.rate_20001_plus?.toFixed(3)} €</span>
+                    <span className="text-sm text-gray-900">{bareme.rate_per_km?.toFixed(3)} €</span>
                   )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -186,8 +154,8 @@ export default function BaremesAdminPage() {
           Pour un trajet de <strong>150 km</strong> avec un véhicule de <strong>5 CV</strong> :
         </p>
         <ul className="text-sm text-gray-600 space-y-1 ml-6 list-disc">
-          <li>Montant = 150 km × {baremes.find(b => b.fiscal_power === 5)?.rate_0_5000?.toFixed(3) || '0.000'} € = {(150 * (baremes.find(b => b.fiscal_power === 5)?.rate_0_5000 || 0)).toFixed(2)} €</li>
-          <li>Si aller-retour : {(300 * (baremes.find(b => b.fiscal_power === 5)?.rate_0_5000 || 0)).toFixed(2)} €</li>
+          <li>Montant = 150 km × {baremes.find(b => b.cv_fiscaux === 5)?.rate_per_km?.toFixed(3) || '0.000'} € = {(150 * (baremes.find(b => b.cv_fiscaux === 5)?.rate_per_km || 0)).toFixed(2)} €</li>
+          <li>Si aller-retour : {(300 * (baremes.find(b => b.cv_fiscaux === 5)?.rate_per_km || 0)).toFixed(2)} €</li>
         </ul>
       </div>
 

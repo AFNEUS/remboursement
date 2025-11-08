@@ -83,7 +83,7 @@ export async function POST(
       
       case 'validate':
         // Valider la demande
-        if (!['treasurer', 'validator'].includes(userProfile.role)) {
+        if (!['admin_asso', 'treasurer', 'validator'].includes(userProfile.role)) {
           return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
         }
         
@@ -103,7 +103,7 @@ export async function POST(
       
       case 'refuse':
         // Refuser la demande
-        if (!['treasurer', 'validator'].includes(userProfile.role)) {
+        if (!['admin_asso', 'treasurer', 'validator'].includes(userProfile.role)) {
           return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
         }
         
@@ -123,7 +123,7 @@ export async function POST(
       
       case 'request_info':
         // Demander des informations complémentaires
-        if (!['treasurer', 'validator'].includes(userProfile.role)) {
+        if (!['admin_asso', 'treasurer', 'validator'].includes(userProfile.role)) {
           return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
         }
         

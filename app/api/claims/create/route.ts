@@ -78,19 +78,22 @@ export async function POST(request: NextRequest) {
     // Créer la demande (statut draft par défaut)
     const newClaim = {
       user_id: userId,
+      event_id: body.event_id || null,
       expense_type: body.expense_type,
       expense_date: body.expense_date,
+      motive: body.motive || null,
+      description: body.description,
+      merchant_name: body.merchant_name,
       amount_ttc: body.amount_ttc,
       currency: body.currency || 'EUR',
+      calculated_amount: calculation.calculatedAmount,
+      reimbursable_amount: calculation.reimbursableAmount,
+      taux_applied: calculation.rateApplied,
+      total_amount: calculation.reimbursableAmount,
       departure_location: body.departure_location,
       arrival_location: body.arrival_location,
       distance_km: body.distance_km,
       cv_fiscaux: body.cv_fiscaux,
-      description: body.description,
-      merchant_name: body.merchant_name,
-      calculated_amount: calculation.calculatedAmount,
-      reimbursable_amount: calculation.reimbursableAmount,
-      taux_applied: calculation.rateApplied,
       requires_second_validation: calculation.requiresSecondValidation,
       status: 'draft', // L'utilisateur doit uploader les justificatifs avant de soumettre
       metadata: {

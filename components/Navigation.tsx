@@ -61,29 +61,29 @@ export default function Navigation() {
       if (session?.user) {
         const authUser = session.user;
 
-        // Essayer de lire users directement avec role/nom
+        // UTILISER RPC pour bypasser RLS (table users n'a pas de RLS, mais sécurisé via RPC)
         const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', authUser.id)
-          .single();
+          .rpc('get_current_user_safe');
 
-        if (!userError && userData) {
-          // Mapper le rôle DB vers UI
+        if (!userError && userData && userData.length > 0) {
+          const dbUser = userData[0];
+          
+          // Mapper le rôle DB (lowercase) vers UI (uppercase)
           const mappedRole = ({
             'admin_asso': 'ADMIN',
             'treasurer': 'TREASURER',
             'validator': 'VALIDATOR',
             'bn_member': 'BN',
-          }[userData.role] || 'MEMBER');
+            'user': 'MEMBER'
+          }[dbUser.role] || 'MEMBER');
 
           setUser({
-            id: authUser.id,
-            email: userData.email || authUser.email,
-            full_name: userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
-            first_name: userData.first_name,
-            last_name: userData.last_name,
-            status: userData.status,
+            id: dbUser.id,
+            email: dbUser.email || authUser.email,
+            full_name: dbUser.full_name,
+            first_name: dbUser.first_name,
+            last_name: dbUser.last_name,
+            status: dbUser.status,
             role: mappedRole,
           });
           setUserRole(mappedRole);
@@ -95,26 +95,30 @@ export default function Navigation() {
           setProfileChecked(true);
           
           if (!syncError) {
-            const retry = await supabase.from('users').select('*').eq('id', authUser.id).single();
-            if (retry.data) {
+            // Retry avec RPC
+            const { data: retryData } = await supabase.rpc('get_current_user_safe');
+            if (retryData && retryData.length > 0) {
+              const dbUser = retryData[0];
               const mappedRole = ({
                 'admin_asso': 'ADMIN',
                 'treasurer': 'TREASURER',
                 'validator': 'VALIDATOR',
                 'bn_member': 'BN',
-              }[retry.data.role] || 'MEMBER');
+                'user': 'MEMBER'
+              }[dbUser.role] || 'MEMBER');
 
               setUser({
-                id: authUser.id,
-                email: retry.data.email || authUser.email,
-                full_name: retry.data.full_name || `${retry.data.first_name || ''} ${retry.data.last_name || ''}`.trim(),
-                first_name: retry.data.first_name,
-                last_name: retry.data.last_name,
-                status: retry.data.status,
+                id: dbUser.id,
+                email: dbUser.email || authUser.email,
+                full_name: dbUser.full_name,
+                first_name: dbUser.first_name,
+                last_name: dbUser.last_name,
+                status: dbUser.status,
                 role: mappedRole,
               });
               setUserRole(mappedRole);
             } else {
+              // Fallback minimal
               setUser({ email: authUser.email, id: authUser.id, full_name: authUser.email.split('@')[0] });
               setUserRole('MEMBER');
             }

@@ -32,13 +32,13 @@ interface ExpenseItem {
 }
 
 const EXPENSE_TYPES = [
-  { value: 'CAR', label: '🚗 Frais kilométriques', needsJustif: true },
-  { value: 'TRAIN', label: '🚄 Train', needsJustif: true },
-  { value: 'BUS', label: '🚌 Bus', needsJustif: true },
-  { value: 'TGVMAX', label: '🚄 TGV Max (abonnement)', needsJustif: true },
-  { value: 'MEAL', label: '🍽️ Repas', needsJustif: false },
-  { value: 'HOTEL', label: '🏨 Hôtel', needsJustif: true },
-  { value: 'OTHER', label: '📄 Autre', needsJustif: true },
+  { value: 'car', label: '🚗 Frais kilométriques', needsJustif: true },
+  { value: 'train', label: '🚄 Train', needsJustif: true },
+  { value: 'transport', label: '🚌 Bus/Transport', needsJustif: true },
+  { value: 'meal', label: '🍽️ Repas', needsJustif: false },
+  { value: 'hotel', label: '🏨 Hôtel', needsJustif: true },
+  { value: 'registration', label: '📝 Inscription', needsJustif: true },
+  { value: 'other', label: '📄 Autre', needsJustif: true },
 ];
 
 const EVENT_TYPES = [

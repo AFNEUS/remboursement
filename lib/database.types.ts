@@ -1,5 +1,6 @@
 // Types pour la base de données Supabase
-// Généré avec: supabase gen types typescript --project-id "$PROJECT_REF" --schema public
+// Aligné avec FINAL_PERFECT_SETUP.sql
+// ⚠️ NE PAS modifier manuellement - regénérer après changements SQL
 
 export type Json =
   | string
@@ -17,7 +18,10 @@ export interface Database {
           id: string
           email: string
           full_name: string
-          role: 'treasurer' | 'validator' | 'user' | 'viewer' | 'admin_asso' | 'bn_member'
+          first_name: string
+          last_name: string
+          role: 'admin_asso' | 'treasurer' | 'validator' | 'bn_member' | 'user'
+          status: 'ADMIN' | 'BN' | 'TREASURER' | 'VALIDATOR' | 'MEMBER'
           pole: string | null
           association_id: string | null
           iban: string | null
@@ -25,16 +29,20 @@ export interface Database {
           iban_verified: boolean
           phone: string | null
           address: string | null
-          created_at: string
-          updated_at: string
           is_active: boolean
           metadata: Json
+          created_at: string
+          updated_at: string
+          last_login_at: string | null
         }
         Insert: {
           id: string
           email: string
           full_name: string
-          role: 'treasurer' | 'validator' | 'user' | 'viewer' | 'admin_asso' | 'bn_member'
+          first_name: string
+          last_name: string
+          role?: 'admin_asso' | 'treasurer' | 'validator' | 'bn_member' | 'user'
+          status?: 'ADMIN' | 'BN' | 'TREASURER' | 'VALIDATOR' | 'MEMBER'
           pole?: string | null
           association_id?: string | null
           iban?: string | null
@@ -42,16 +50,20 @@ export interface Database {
           iban_verified?: boolean
           phone?: string | null
           address?: string | null
-          created_at?: string
-          updated_at?: string
           is_active?: boolean
           metadata?: Json
+          created_at?: string
+          updated_at?: string
+          last_login_at?: string | null
         }
         Update: {
           id?: string
           email?: string
           full_name?: string
-          role?: 'treasurer' | 'validator' | 'user' | 'viewer' | 'admin_asso' | 'bn_member'
+          first_name?: string
+          last_name?: string
+          role?: 'admin_asso' | 'treasurer' | 'validator' | 'bn_member' | 'user'
+          status?: 'ADMIN' | 'BN' | 'TREASURER' | 'VALIDATOR' | 'MEMBER'
           pole?: string | null
           association_id?: string | null
           iban?: string | null
@@ -59,155 +71,265 @@ export interface Database {
           iban_verified?: boolean
           phone?: string | null
           address?: string | null
-          created_at?: string
-          updated_at?: string
           is_active?: boolean
           metadata?: Json
+          created_at?: string
+          updated_at?: string
+          last_login_at?: string | null
         }
       }
-      associations: {
+      authorized_users: {
+        Row: {
+          email: string
+          first_name: string
+          last_name: string
+          role: 'admin_asso' | 'treasurer' | 'validator' | 'bn_member' | 'user'
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          email: string
+          first_name: string
+          last_name: string
+          role?: 'admin_asso' | 'treasurer' | 'validator' | 'bn_member' | 'user'
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          email?: string
+          first_name?: string
+          last_name?: string
+          role?: 'admin_asso' | 'treasurer' | 'validator' | 'bn_member' | 'user'
+          notes?: string | null
+          created_at?: string
+        }
+      }
+      events: {
         Row: {
           id: string
           name: string
-          code: string
-          budget_annual: number | null
-          contact_email: string | null
-          contact_phone: string | null
-          is_active: boolean
+          description: string | null
+          event_type: 'CONGRES_ANNUEL' | 'WEEKEND_PASSATION' | 'FORMATION' | 'REUNION_BN' | 'REUNION_REGION' | 'EVENEMENT_EXTERNE' | 'AUTRE'
+          start_date: string
+          end_date: string
+          location: string
+          departure_city: string | null
+          custom_km_cap: number
+          carpooling_bonus_cap_percent: number
+          allow_carpooling_bonus: boolean
+          max_train_amount: number | null
+          max_hotel_per_night: number | null
+          max_meal_amount: number | null
+          created_by: string | null
           created_at: string
           updated_at: string
-          metadata: Json
         }
         Insert: {
           id?: string
           name: string
-          code: string
-          budget_annual?: number | null
-          contact_email?: string | null
-          contact_phone?: string | null
-          is_active?: boolean
+          description?: string | null
+          event_type: 'CONGRES_ANNUEL' | 'WEEKEND_PASSATION' | 'FORMATION' | 'REUNION_BN' | 'REUNION_REGION' | 'EVENEMENT_EXTERNE' | 'AUTRE'
+          start_date: string
+          end_date: string
+          location: string
+          departure_city?: string | null
+          custom_km_cap?: number
+          carpooling_bonus_cap_percent?: number
+          allow_carpooling_bonus?: boolean
+          max_train_amount?: number | null
+          max_hotel_per_night?: number | null
+          max_meal_amount?: number | null
+          created_by?: string | null
           created_at?: string
           updated_at?: string
-          metadata?: Json
         }
         Update: {
           id?: string
           name?: string
-          code?: string
-          budget_annual?: number | null
-          contact_email?: string | null
-          contact_phone?: string | null
-          is_active?: boolean
+          description?: string | null
+          event_type?: 'CONGRES_ANNUEL' | 'WEEKEND_PASSATION' | 'FORMATION' | 'REUNION_BN' | 'REUNION_REGION' | 'EVENEMENT_EXTERNE' | 'AUTRE'
+          start_date?: string
+          end_date?: string
+          location?: string
+          departure_city?: string | null
+          custom_km_cap?: number
+          carpooling_bonus_cap_percent?: number
+          allow_carpooling_bonus?: boolean
+          max_train_amount?: number | null
+          max_hotel_per_night?: number | null
+          max_meal_amount?: number | null
+          created_by?: string | null
           created_at?: string
           updated_at?: string
-          metadata?: Json
+        }
+      }
+      event_baremes: {
+        Row: {
+          id: string
+          event_id: string
+          expense_type: 'train' | 'avion' | 'covoiturage' | 'hebergement'
+          bn_rate: number
+          admin_rate: number
+          other_rate: number
+          max_amount: number | null
+          notes: string | null
+          auto_calculated: boolean
+          sncf_price_young: number | null
+          sncf_price_standard: number | null
+          last_updated: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          expense_type: 'train' | 'avion' | 'covoiturage' | 'hebergement'
+          bn_rate?: number
+          admin_rate?: number
+          other_rate?: number
+          max_amount?: number | null
+          notes?: string | null
+          auto_calculated?: boolean
+          sncf_price_young?: number | null
+          sncf_price_standard?: number | null
+          last_updated?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          expense_type?: 'train' | 'avion' | 'covoiturage' | 'hebergement'
+          bn_rate?: number
+          admin_rate?: number
+          other_rate?: number
+          max_amount?: number | null
+          notes?: string | null
+          auto_calculated?: boolean
+          sncf_price_young?: number | null
+          sncf_price_standard?: number | null
+          last_updated?: string
+          created_at?: string
         }
       }
       expense_claims: {
         Row: {
           id: string
           user_id: string
+          event_id: string | null
           expense_type: 'transport' | 'train' | 'car' | 'hotel' | 'meal' | 'registration' | 'other'
           expense_date: string
+          motive: string | null
+          description: string | null
+          merchant_name: string | null
           amount_ttc: number
           currency: string
+          calculated_amount: number | null
+          validated_amount: number | null
+          reimbursable_amount: number | null
+          taux_applied: number | null
+          total_amount: number | null
           departure_location: string | null
           arrival_location: string | null
           distance_km: number | null
           cv_fiscaux: number | null
-          calculated_amount: number | null
-          reimbursable_amount: number | null
-          taux_applied: number | null
-          description: string | null
-          merchant_name: string | null
           status: 'draft' | 'submitted' | 'incomplete' | 'to_validate' | 'validated' | 'refused' | 'exported_for_payment' | 'paid' | 'closed' | 'disputed'
           submitted_at: string | null
           validated_at: string | null
           validated_by: string | null
-          paid_at: string | null
+          validator_id: string | null
           validation_comment: string | null
           refusal_reason: string | null
           requires_second_validation: boolean
           second_validator_id: string | null
+          paid_at: string | null
           payment_batch_id: string | null
           payment_reference: string | null
-          created_at: string
-          updated_at: string
-          metadata: Json
           has_justificatifs: boolean
           is_duplicate_suspect: boolean
           reminder_sent_count: number
           last_reminder_at: string | null
+          metadata: Json
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
+          event_id?: string | null
           expense_type: 'transport' | 'train' | 'car' | 'hotel' | 'meal' | 'registration' | 'other'
           expense_date: string
+          motive?: string | null
+          description?: string | null
+          merchant_name?: string | null
           amount_ttc: number
           currency?: string
+          calculated_amount?: number | null
+          validated_amount?: number | null
+          reimbursable_amount?: number | null
+          taux_applied?: number | null
+          total_amount?: number | null
           departure_location?: string | null
           arrival_location?: string | null
           distance_km?: number | null
           cv_fiscaux?: number | null
-          calculated_amount?: number | null
-          reimbursable_amount?: number | null
-          taux_applied?: number | null
-          description?: string | null
-          merchant_name?: string | null
           status?: 'draft' | 'submitted' | 'incomplete' | 'to_validate' | 'validated' | 'refused' | 'exported_for_payment' | 'paid' | 'closed' | 'disputed'
           submitted_at?: string | null
           validated_at?: string | null
           validated_by?: string | null
-          paid_at?: string | null
+          validator_id?: string | null
           validation_comment?: string | null
           refusal_reason?: string | null
           requires_second_validation?: boolean
           second_validator_id?: string | null
+          paid_at?: string | null
           payment_batch_id?: string | null
           payment_reference?: string | null
-          created_at?: string
-          updated_at?: string
-          metadata?: Json
           has_justificatifs?: boolean
           is_duplicate_suspect?: boolean
           reminder_sent_count?: number
           last_reminder_at?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
           user_id?: string
+          event_id?: string | null
           expense_type?: 'transport' | 'train' | 'car' | 'hotel' | 'meal' | 'registration' | 'other'
           expense_date?: string
+          motive?: string | null
+          description?: string | null
+          merchant_name?: string | null
           amount_ttc?: number
           currency?: string
+          calculated_amount?: number | null
+          validated_amount?: number | null
+          reimbursable_amount?: number | null
+          taux_applied?: number | null
+          total_amount?: number | null
           departure_location?: string | null
           arrival_location?: string | null
           distance_km?: number | null
           cv_fiscaux?: number | null
-          calculated_amount?: number | null
-          reimbursable_amount?: number | null
-          taux_applied?: number | null
-          description?: string | null
-          merchant_name?: string | null
           status?: 'draft' | 'submitted' | 'incomplete' | 'to_validate' | 'validated' | 'refused' | 'exported_for_payment' | 'paid' | 'closed' | 'disputed'
           submitted_at?: string | null
           validated_at?: string | null
           validated_by?: string | null
-          paid_at?: string | null
+          validator_id?: string | null
           validation_comment?: string | null
           refusal_reason?: string | null
           requires_second_validation?: boolean
           second_validator_id?: string | null
+          paid_at?: string | null
           payment_batch_id?: string | null
           payment_reference?: string | null
-          created_at?: string
-          updated_at?: string
-          metadata?: Json
           has_justificatifs?: boolean
           is_duplicate_suspect?: boolean
           reminder_sent_count?: number
           last_reminder_at?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
         }
       }
       justificatifs: {
@@ -513,51 +635,47 @@ export interface Database {
       }
     }
     Views: {
-      claims_enriched: {
-        Row: {
-          id: string
-          user_id: string
-          expense_type: string
-          expense_date: string
-          amount_ttc: number
-          status: string
-          full_name: string
-          email: string
-          role: string
-          validator_name: string | null
-          payment_batch_name: string | null
-          justificatifs_count: number
-          // ... autres champs
-        }
-      }
-      user_stats: {
-        Row: {
-          user_id: string
-          total_claims: number
-          validated_claims: number
-          paid_claims: number
-          total_reimbursed: number
-          avg_validation_days: number
-        }
-      }
-      treasurer_dashboard: {
-        Row: {
-          pending_validation: number
-          incomplete_claims: number
-          total_to_pay: number
-          claims_to_pay: number
-          avg_validation_days_30d: number
-        }
-      }
-    }
-    Functions: {
       [_ in never]: never
     }
+    Functions: {
+      get_current_user_safe: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          email: string
+          full_name: string
+          first_name: string
+          last_name: string
+          role: string
+          status: string
+          phone: string | null
+          iban: string | null
+          iban_verified: boolean
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      sync_current_user: {
+        Args: Record<string, never>
+        Returns: void
+      }
+      update_user_profile: {
+        Args: {
+          p_first_name?: string
+          p_last_name?: string
+          p_iban?: string
+        }
+        Returns: void
+      }
+    }
     Enums: {
-      user_role: 'treasurer' | 'validator' | 'user' | 'viewer' | 'admin_asso' | 'bn_member'
+      user_role: 'admin_asso' | 'treasurer' | 'validator' | 'bn_member' | 'user'
+      user_status: 'ADMIN' | 'BN' | 'TREASURER' | 'VALIDATOR' | 'MEMBER'
       expense_type: 'transport' | 'train' | 'car' | 'hotel' | 'meal' | 'registration' | 'other'
       claim_status: 'draft' | 'submitted' | 'incomplete' | 'to_validate' | 'validated' | 'refused' | 'exported_for_payment' | 'paid' | 'closed' | 'disputed'
       batch_status: 'draft' | 'exported' | 'sent_to_bank' | 'processed' | 'closed'
+      event_type: 'CONGRES_ANNUEL' | 'WEEKEND_PASSATION' | 'FORMATION' | 'REUNION_BN' | 'REUNION_REGION' | 'EVENEMENT_EXTERNE' | 'AUTRE'
     }
   }
 }

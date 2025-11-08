@@ -27,8 +27,8 @@ export default function EventsAdminPage() {
     name: '',
     description: '',
     event_type: 'AUTRE',
-    date_start: '',
-    date_end: '',
+    start_date: '',
+    end_date: '',
     location: '',
     custom_km_cap: '0.12',
     carpooling_bonus_cap_percent: '40',
@@ -52,7 +52,7 @@ export default function EventsAdminPage() {
     const testUser = localStorage.getItem('test_user');
     if (testUser) {
       const parsedUser = JSON.parse(testUser);
-      if (parsedUser.role !== 'ADMIN') {
+      if (parsedUser.role !== 'ADMIN' && parsedUser.role !== 'admin_asso') {
         alert('❌ Accès réservé aux administrateurs');
         router.push('/');
         return;
@@ -66,6 +66,18 @@ export default function EventsAdminPage() {
       router.push('/');
       return;
     }
+    
+    // Vérifier le rôle via RPC
+    const { data: userData } = await supabase.rpc('get_current_user_safe');
+    if (userData && (userData as any).length > 0) {
+      const dbUser = (userData as any)[0];
+      if (dbUser.role !== 'admin_asso') {
+        alert('❌ Accès réservé aux administrateurs');
+        router.push('/');
+        return;
+      }
+    }
+    
     setUser(user);
   }
 
@@ -74,7 +86,7 @@ export default function EventsAdminPage() {
       const { data, error } = await supabase
         .from('events')
         .select('*')
-        .order('date_start', { ascending: false });
+        .order('start_date', { ascending: false });
 
       if (error) throw error;
       setEvents(data || []);
@@ -88,8 +100,8 @@ export default function EventsAdminPage() {
       name: '',
       description: '',
       event_type: 'AUTRE',
-      date_start: '',
-      date_end: '',
+      start_date: '',
+      end_date: '',
       location: '',
       custom_km_cap: '0.12',
       carpooling_bonus_cap_percent: '40',
@@ -107,8 +119,8 @@ export default function EventsAdminPage() {
       name: event.name,
       description: event.description || '',
       event_type: event.event_type,
-      date_start: event.date_start,
-      date_end: event.date_end,
+      start_date: event.start_date,
+      end_date: event.end_date,
       location: event.location || '',
       custom_km_cap: event.custom_km_cap?.toString() || '0.12',
       carpooling_bonus_cap_percent: event.carpooling_bonus_cap_percent?.toString() || '40',
@@ -130,8 +142,8 @@ export default function EventsAdminPage() {
         name: formData.name,
         description: formData.description || null,
         event_type: formData.event_type,
-        date_start: formData.date_start,
-        date_end: formData.date_end,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
         location: formData.location || null,
         custom_km_cap: parseFloat(formData.custom_km_cap),
         carpooling_bonus_cap_percent: parseInt(formData.carpooling_bonus_cap_percent),
@@ -267,8 +279,8 @@ export default function EventsAdminPage() {
                 <label className="block text-sm font-semibold mb-2">Date de début *</label>
                 <input
                   type="date"
-                  value={formData.date_start}
-                  onChange={(e) => setFormData({ ...formData, date_start: e.target.value })}
+                  value={formData.start_date}
+                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                   required
                   className="w-full px-4 py-2 border rounded-lg"
                 />
@@ -278,8 +290,8 @@ export default function EventsAdminPage() {
                 <label className="block text-sm font-semibold mb-2">Date de fin *</label>
                 <input
                   type="date"
-                  value={formData.date_end}
-                  onChange={(e) => setFormData({ ...formData, date_end: e.target.value })}
+                  value={formData.end_date}
+                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                   required
                   className="w-full px-4 py-2 border rounded-lg"
                 />
@@ -427,7 +439,7 @@ export default function EventsAdminPage() {
                         <p className="text-sm text-gray-600 mb-2">{event.description}</p>
                       )}
                       <div className="text-sm text-gray-600 space-y-1">
-                        <div>📅 {formatDate(event.date_start)} → {formatDate(event.date_end)}</div>
+                        <div>📅 {formatDate(event.start_date)} → {formatDate(event.end_date)}</div>
                         {event.location && <div>📍 {event.location}</div>}
                         <div className="flex gap-4 mt-2 text-xs">
                           <span>🚗 {event.custom_km_cap}€/km</span>

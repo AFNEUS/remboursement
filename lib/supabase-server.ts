@@ -28,14 +28,32 @@ export async function getCurrentUser() {
 }
 
 // Helper pour vérifier si l'utilisateur a un rôle spécifique
-export async function requireRole(role: 'member' | 'validator' | 'treasurer' | 'admin') {
+// Accepte les rôles en lowercase (DB) ou uppercase (UI)
+export async function requireRole(role: 'user' | 'validator' | 'treasurer' | 'admin_asso' | 'bn_member' | 'ADMIN' | 'VALIDATOR' | 'TREASURER' | 'BN' | 'MEMBER') {
   const user = await getCurrentUser();
   
   if (!user) {
     throw new Error('Non authentifié');
   }
 
-  if (user.role !== role && user.role !== 'admin') {
+  // Mapper les rôles UI vers DB si nécessaire
+  const roleMap: Record<string, string> = {
+    'ADMIN': 'admin_asso',
+    'VALIDATOR': 'validator',
+    'TREASURER': 'treasurer',
+    'BN': 'bn_member',
+    'MEMBER': 'user',
+  };
+
+  const normalizedRole = roleMap[role] || role;
+  const normalizedUserRole = roleMap[user.role] || user.role;
+
+  // Admin a tous les accès
+  if (normalizedUserRole === 'admin_asso') {
+    return user;
+  }
+
+  if (normalizedUserRole !== normalizedRole) {
     throw new Error('Accès non autorisé');
   }
 
