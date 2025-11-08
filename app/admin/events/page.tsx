@@ -30,12 +30,14 @@ export default function EventsAdminPage() {
     start_date: '',
     end_date: '',
     location: '',
+    departure_city: '',
     custom_km_cap: '0.12',
     carpooling_bonus_cap_percent: '40',
     allow_carpooling_bonus: true,
     max_train_amount: '',
     max_hotel_per_night: '',
     max_meal_amount: '',
+    allowed_expense_types: ['car', 'train', 'transport', 'meal', 'hotel', 'registration', 'other'],
   });
 
   useEffect(() => {
@@ -105,12 +107,14 @@ export default function EventsAdminPage() {
       start_date: '',
       end_date: '',
       location: '',
+      departure_city: '',
       custom_km_cap: '0.12',
       carpooling_bonus_cap_percent: '40',
       allow_carpooling_bonus: true,
       max_train_amount: '',
       max_hotel_per_night: '',
       max_meal_amount: '',
+      allowed_expense_types: ['car', 'train', 'transport', 'meal', 'hotel', 'registration', 'other'],
     });
     setEditingEvent(null);
     setShowForm(false);
@@ -124,61 +128,62 @@ export default function EventsAdminPage() {
       start_date: event.start_date,
       end_date: event.end_date,
       location: event.location || '',
+      departure_city: event.departure_city || '',
       custom_km_cap: event.custom_km_cap?.toString() || '0.12',
       carpooling_bonus_cap_percent: event.carpooling_bonus_cap_percent?.toString() || '40',
       allow_carpooling_bonus: event.allow_carpooling_bonus,
       max_train_amount: event.max_train_amount?.toString() || '',
       max_hotel_per_night: event.max_hotel_per_night?.toString() || '',
       max_meal_amount: event.max_meal_amount?.toString() || '',
+      allowed_expense_types: event.allowed_expense_types || ['car', 'train', 'transport', 'meal', 'hotel', 'registration', 'other'],
     });
     setEditingEvent(event);
     setShowForm(true);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+    async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    if (!supabase) return;
 
     try {
-      const eventData = {
-        name: formData.name,
-        description: formData.description || null,
-        event_type: formData.event_type,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        location: formData.location || null,
-        custom_km_cap: parseFloat(formData.custom_km_cap),
-        carpooling_bonus_cap_percent: parseInt(formData.carpooling_bonus_cap_percent),
-        allow_carpooling_bonus: formData.allow_carpooling_bonus,
-        max_train_amount: formData.max_train_amount ? parseFloat(formData.max_train_amount) : null,
-        max_hotel_per_night: formData.max_hotel_per_night ? parseFloat(formData.max_hotel_per_night) : null,
-        max_meal_amount: formData.max_meal_amount ? parseFloat(formData.max_meal_amount) : null,
-        created_by: user.id,
+      const params = {
+        p_name: formData.name,
+        p_description: formData.description,
+        p_event_type: formData.event_type,
+        p_start_date: formData.start_date,
+        p_end_date: formData.end_date,
+        p_location: formData.location,
+        p_departure_city: formData.departure_city || null,
+        p_custom_km_cap: parseFloat(formData.custom_km_cap),
+        p_carpooling_bonus_cap_percent: parseFloat(formData.carpooling_bonus_cap_percent),
+        p_allow_carpooling_bonus: formData.allow_carpooling_bonus,
+        p_max_train_amount: formData.max_train_amount ? parseFloat(formData.max_train_amount) : null,
+        p_max_hotel_per_night: formData.max_hotel_per_night ? parseFloat(formData.max_hotel_per_night) : null,
+        p_max_meal_amount: formData.max_meal_amount ? parseFloat(formData.max_meal_amount) : null,
+        p_allowed_expense_types: formData.allowed_expense_types,
       };
 
       if (editingEvent) {
-        const { error } = await supabase
-          .from('events')
-          .update(eventData)
-          .eq('id', editingEvent.id);
-        
+        const { data, error } = await supabase.rpc('update_event', {
+          p_event_id: editingEvent.id,
+          ...params,
+        });
+
         if (error) throw error;
-        alert('✅ Événement modifié avec succès');
+        if (!data) throw new Error('Échec de la mise à jour de l\'événement');
       } else {
-        const { error } = await supabase
-          .from('events')
-          .insert(eventData);
-        
+        const { data, error } = await supabase.rpc('create_event', params);
+
         if (error) throw error;
-        alert('✅ Événement créé avec succès');
+        if (!data) throw new Error('Échec de la création de l\'événement');
       }
 
+      await loadEvents();
       resetForm();
-      loadEvents();
+      setShowForm(false);
     } catch (error: any) {
+      console.error('Error saving event:', error);
       alert(`❌ Erreur: ${error.message}`);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -304,7 +309,15 @@ export default function EventsAdminPage() {
                 <input
                   type="text"
                   value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  onChange={(e) => {
+                    const newLocation = e.target.value;
+                    setFormData({ 
+                      ...formData, 
+                      location: newLocation,
+                      // Auto-suggest departure_city from location if empty
+                      departure_city: formData.departure_city || newLocation
+                    });
+                  }}
                   className="w-full px-4 py-2 border rounded-lg"
                   placeholder="Ex: Paris"
                 />
@@ -394,6 +407,58 @@ export default function EventsAdminPage() {
               </div>
               <p className="text-xs text-gray-600 mt-2">
                 ℹ️ Laisser vide pour utiliser les barèmes par défaut
+              </p>
+            </div>
+
+            {/* Ville de départ pour train */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+              <h3 className="font-semibold mb-4 text-purple-900">🚄 Configuration train</h3>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Ville de départ (pour barèmes train intelligents)</label>
+                <input
+                  type="text"
+                  value={formData.departure_city}
+                  onChange={(e) => setFormData({ ...formData, departure_city: e.target.value })}
+                  placeholder="Ex: Paris"
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  💡 Si renseigné, le système utilisera automatiquement les barèmes SNCF pour cette ville
+                </p>
+              </div>
+            </div>
+
+            {/* Types de dépenses autorisées */}
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+              <h3 className="font-semibold mb-4 text-orange-900">📋 Types de dépenses autorisées</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { value: 'car', label: '🚗 Voiture', emoji: '🚗' },
+                  { value: 'train', label: '🚄 Train', emoji: '🚄' },
+                  { value: 'transport', label: '🚌 Transport', emoji: '🚌' },
+                  { value: 'meal', label: '🍽️ Repas', emoji: '🍽️' },
+                  { value: 'hotel', label: '🏨 Hôtel', emoji: '🏨' },
+                  { value: 'registration', label: '🎫 Inscription', emoji: '🎫' },
+                  { value: 'other', label: '📦 Autre', emoji: '📦' },
+                ].map((type) => (
+                  <label key={type.value} className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-orange-100 transition">
+                    <input
+                      type="checkbox"
+                      checked={formData.allowed_expense_types.includes(type.value)}
+                      onChange={(e) => {
+                        const types = e.target.checked
+                          ? [...formData.allowed_expense_types, type.value]
+                          : formData.allowed_expense_types.filter((t) => t !== type.value);
+                        setFormData({ ...formData, allowed_expense_types: types });
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">{type.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-600 mt-2">
+                ℹ️ Seuls les types cochés seront disponibles lors de la création de demandes pour cet événement
               </p>
             </div>
 

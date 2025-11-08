@@ -44,12 +44,12 @@ export default function AdminUsersPage() {
 
       setCurrentUser(userData);
 
-      // Charger tous les utilisateurs via RPC
-      const { data: allUsers, error } = await supabase.rpc('get_all_users');
+  // Charger tous les utilisateurs (whitelist + users) via nouvelle RPC
+  const { data: allUsers, error } = await supabase.rpc('get_all_user_profiles');
 
-      if (error) throw error;
+  if (error) throw error;
 
-      setUsers((allUsers as any[]) || []);
+  setUsers((allUsers as any[]) || []);
     } catch (error: any) {
       console.error('Erreur chargement:', error);
       alert(`❌ Erreur: ${error.message}`);
@@ -231,71 +231,72 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email.split('@')[0]}
+              {filteredUsers.map((user) => {
+                // Fallbacks whitelist si jamais connecté
+                const displayName = user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || `${user.whitelist_first_name || ''} ${user.whitelist_last_name || ''}`.trim() || user.email.split('@')[0];
+                const displayRole = user.user_role || user.role || user.whitelist_role || 'user';
+                const displayStatus = user.status || 'MEMBER';
+                const isActive = user.is_active !== undefined && user.is_active !== null ? user.is_active : true;
+                const createdAt = user.user_created_at || user.whitelist_created_at;
+                const lastLogin = user.last_login_at ? new Date(user.last_login_at).toLocaleString('fr-FR') : 'Jamais connecté';
+                const notes = user.whitelist_notes || '';
+                return (
+                  <tr key={user.user_id || user.email} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{displayName}</div>
+                          {user.user_id === currentUser?.id && (
+                            <div className="text-xs text-indigo-600 font-medium">✨ C&apos;est vous</div>
+                          )}
+                          {!isActive && (
+                            <div className="text-xs text-red-600 font-medium">🚫 Désactivé</div>
+                          )}
+                          {notes && (
+                            <div className="text-xs text-gray-500">📝 {notes}</div>
+                          )}
                         </div>
-                        {user.id === currentUser?.id && (
-                          <div className="text-xs text-indigo-600 font-medium">✨ C&apos;est vous</div>
-                        )}
-                        {!user.is_active && (
-                          <div className="text-xs text-red-600 font-medium">🚫 Désactivé</div>
-                        )}
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{user.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={user.role}
-                      onChange={(e) => updateUserRole(user.id, e.target.value)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-                        ROLE_LABELS[user.role]?.color || 'bg-gray-100 text-gray-800'
-                      }`}
-                      disabled={user.id === currentUser?.id}
-                    >
-                      <option value="admin_asso">👨‍💼 Admin</option>
-                      <option value="treasurer">💰 Trésorier</option>
-                      <option value="validator">✅ Validateur</option>
-                      <option value="bn_member">⭐ Membre BN</option>
-                      <option value="user">👤 Membre simple</option>
-                    </select>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold inline-block ${
-                        STATUS_LABELS[user.status]?.color || 'bg-gray-100 text-gray-800'
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{user.email}</div>
+                      <div className="text-xs text-gray-500">{lastLogin}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="block text-xs font-semibold mb-1">{displayRole}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold inline-block ${
+                        STATUS_LABELS[displayStatus]?.color || 'bg-gray-100 text-gray-800'
                       }`}>
-                      {STATUS_LABELS[user.status]?.label || user.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={() => toggleUserAccess(user.id, user.is_active)}
-                        disabled={user.id === currentUser?.id}
-                        className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                          user.id === currentUser?.id
-                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            : user.is_active
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                            : 'bg-green-100 text-green-700 hover:bg-green-200'
-                        }`}
-                      >
-                        {user.is_active ? '🚫 Bloquer accès' : '✅ Autoriser accès'}
-                      </button>
-                      <div className="text-xs text-gray-500">
-                        Inscrit le {new Date(user.created_at).toLocaleDateString('fr-FR')}
+                        {STATUS_LABELS[displayStatus]?.label || displayStatus}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex flex-col gap-2">
+                        {user.user_id && (
+                          <button
+                            onClick={() => toggleUserAccess(user.user_id, isActive)}
+                            disabled={user.user_id === currentUser?.id}
+                            className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                              user.user_id === currentUser?.id
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : isActive
+                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            }`}
+                          >
+                            {isActive ? '🚫 Bloquer accès' : '✅ Autoriser accès'}
+                          </button>
+                        )}
+                        <div className="text-xs text-gray-500">
+                          Inscrit le {createdAt ? new Date(createdAt).toLocaleDateString('fr-FR') : 'N/A'}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

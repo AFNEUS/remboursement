@@ -1,3 +1,82 @@
+-- ---------------------------------------------------------------------
+-- 2.X VUE: user_profile (whitelist + users + infos de connexion)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE VIEW public.user_profile AS
+SELECT
+    au.email AS email,
+    au.first_name AS whitelist_first_name,
+    au.last_name AS whitelist_last_name,
+    au.role AS whitelist_role,
+    au.notes AS whitelist_notes,
+    au.created_at AS whitelist_created_at,
+    u.id AS user_id,
+    u.full_name,
+    u.first_name,
+    u.last_name,
+    u.role AS user_role,
+    u.status,
+    u.phone,
+    u.iban,
+    u.iban_verified,
+    u.is_active,
+    u.created_at AS user_created_at,
+    u.updated_at,
+    u.last_login_at,
+    u.metadata,
+    u.address,
+    u.pole,
+    u.association_id
+FROM public.authorized_users au
+LEFT JOIN public.users u ON LOWER(au.email) = LOWER(u.email);
+
+COMMENT ON VIEW public.user_profile IS 'Vue combinant la whitelist (authorized_users) et les infos de connexion/profil (users)';
+
+-- ---------------------------------------------------------------------
+-- 2.X FONCTION ADMIN: get_all_user_profiles (pour admin users page)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_all_user_profiles()
+RETURNS TABLE (
+    email TEXT,
+    whitelist_first_name TEXT,
+    whitelist_last_name TEXT,
+    whitelist_role TEXT,
+    whitelist_notes TEXT,
+    whitelist_created_at TIMESTAMPTZ,
+    user_id UUID,
+    full_name TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    user_role TEXT,
+    status TEXT,
+    phone TEXT,
+    iban TEXT,
+    iban_verified BOOLEAN,
+    is_active BOOLEAN,
+    user_created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ,
+    last_login_at TIMESTAMPTZ,
+    metadata JSONB,
+    address TEXT,
+    pole TEXT,
+    association_id UUID
+)
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+        SELECT 
+            email, whitelist_first_name, whitelist_last_name, whitelist_role, whitelist_notes, whitelist_created_at,
+            user_id, full_name, first_name, last_name, user_role, status, phone, iban, iban_verified, is_active, user_created_at, updated_at, last_login_at, metadata, address, pole, association_id
+        FROM public.user_profile
+        WHERE EXISTS (
+                SELECT 1 FROM public.users u2
+                WHERE u2.id = auth.uid()
+                AND u2.role = 'admin_asso'
+        )
+        ORDER BY whitelist_created_at ASC, user_created_at DESC;
+$$;
+
+COMMENT ON FUNCTION public.get_all_user_profiles IS 'Liste complète des utilisateurs autorisés (whitelist + users), même sans connexion, pour l\'admin';
 -- =====================================================================
 -- AFNEUS REMBOURSEMENT - SETUP FINAL PARFAIT ET UNIQUE
 -- =====================================================================
@@ -1295,6 +1374,145 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.get_claims_for_validation IS 'Récupère toutes les demandes à valider avec infos complètes - optimisé pour page validator';
+
+-- ---------------------------------------------------------------------
+-- 2.16 FONCTION: create_event (pour admin)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.create_event(
+    p_name TEXT,
+    p_description TEXT,
+    p_event_type TEXT,
+    p_start_date DATE,
+    p_end_date DATE,
+    p_location TEXT,
+    p_departure_city TEXT DEFAULT NULL,
+    p_custom_km_cap DECIMAL(6,3) DEFAULT 0.120,
+    p_carpooling_bonus_cap_percent INTEGER DEFAULT 40,
+    p_allow_carpooling_bonus BOOLEAN DEFAULT true,
+    p_max_train_amount DECIMAL(10,2) DEFAULT NULL,
+    p_max_hotel_per_night DECIMAL(10,2) DEFAULT NULL,
+    p_max_meal_amount DECIMAL(10,2) DEFAULT NULL,
+    p_allowed_expense_types TEXT[] DEFAULT ARRAY['car','train','transport','meal','hotel','registration','other']::TEXT[]
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_event_id UUID;
+BEGIN
+    -- Vérifier que l'utilisateur est staff
+    IF NOT public.is_staff() THEN
+        RAISE EXCEPTION 'Accès refusé - Staff uniquement';
+    END IF;
+    
+    -- Valider les dates
+    IF p_start_date > p_end_date THEN
+        RAISE EXCEPTION 'La date de début doit être antérieure à la date de fin';
+    END IF;
+    
+    -- Insérer l'événement
+    INSERT INTO public.events (
+        name,
+        description,
+        event_type,
+        start_date,
+        end_date,
+        location,
+        departure_city,
+        custom_km_cap,
+        carpooling_bonus_cap_percent,
+        allow_carpooling_bonus,
+        max_train_amount,
+        max_hotel_per_night,
+        max_meal_amount,
+        allowed_expense_types,
+        created_by
+    ) VALUES (
+        p_name,
+        p_description,
+        p_event_type,
+        p_start_date,
+        p_end_date,
+        p_location,
+        p_departure_city,
+        p_custom_km_cap,
+        p_carpooling_bonus_cap_percent,
+        p_allow_carpooling_bonus,
+        p_max_train_amount,
+        p_max_hotel_per_night,
+        p_max_meal_amount,
+        p_allowed_expense_types,
+        auth.uid()
+    )
+    RETURNING id INTO v_event_id;
+    
+    RETURN v_event_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.create_event IS 'Crée un événement - accès staff uniquement';
+
+-- ---------------------------------------------------------------------
+-- 2.17 FONCTION: update_event (pour admin)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.update_event(
+    p_event_id UUID,
+    p_name TEXT,
+    p_description TEXT,
+    p_event_type TEXT,
+    p_start_date DATE,
+    p_end_date DATE,
+    p_location TEXT,
+    p_departure_city TEXT DEFAULT NULL,
+    p_custom_km_cap DECIMAL(6,3) DEFAULT 0.120,
+    p_carpooling_bonus_cap_percent INTEGER DEFAULT 40,
+    p_allow_carpooling_bonus BOOLEAN DEFAULT true,
+    p_max_train_amount DECIMAL(10,2) DEFAULT NULL,
+    p_max_hotel_per_night DECIMAL(10,2) DEFAULT NULL,
+    p_max_meal_amount DECIMAL(10,2) DEFAULT NULL,
+    p_allowed_expense_types TEXT[] DEFAULT ARRAY['car','train','transport','meal','hotel','registration','other']::TEXT[]
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- Vérifier que l'utilisateur est staff
+    IF NOT public.is_staff() THEN
+        RAISE EXCEPTION 'Accès refusé - Staff uniquement';
+    END IF;
+    
+    -- Valider les dates
+    IF p_start_date > p_end_date THEN
+        RAISE EXCEPTION 'La date de début doit être antérieure à la date de fin';
+    END IF;
+    
+    -- Mettre à jour l'événement
+    UPDATE public.events
+    SET
+        name = p_name,
+        description = p_description,
+        event_type = p_event_type,
+        start_date = p_start_date,
+        end_date = p_end_date,
+        location = p_location,
+        departure_city = p_departure_city,
+        custom_km_cap = p_custom_km_cap,
+        carpooling_bonus_cap_percent = p_carpooling_bonus_cap_percent,
+        allow_carpooling_bonus = p_allow_carpooling_bonus,
+        max_train_amount = p_max_train_amount,
+        max_hotel_per_night = p_max_hotel_per_night,
+        max_meal_amount = p_max_meal_amount,
+        allowed_expense_types = p_allowed_expense_types,
+        updated_at = NOW()
+    WHERE id = p_event_id;
+    
+    RETURN TRUE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_event IS 'Met à jour un événement - accès staff uniquement';
 
 -- =====================================================================
 -- PHASE 3: ROW LEVEL SECURITY (RLS)
