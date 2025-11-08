@@ -943,6 +943,43 @@ $$;
 COMMENT ON FUNCTION public.admin_update_user_role IS 'Permet à un admin de modifier le rôle d''un utilisateur';
 
 -- ---------------------------------------------------------------------
+-- 2.10b FONCTION ADMIN: admin_toggle_user_access
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.admin_toggle_user_access(
+    target_user_id UUID,
+    new_is_active BOOLEAN
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- Vérifier que l'appelant est admin
+    IF NOT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role = 'admin_asso'
+    ) THEN
+        RAISE EXCEPTION 'Accès refusé - Admin uniquement';
+    END IF;
+    
+    -- Empêcher l'admin de se désactiver lui-même
+    IF target_user_id = auth.uid() THEN
+        RAISE EXCEPTION 'Vous ne pouvez pas désactiver votre propre compte';
+    END IF;
+    
+    -- Mettre à jour is_active
+    UPDATE public.users
+    SET is_active = new_is_active, updated_at = NOW()
+    WHERE id = target_user_id;
+    
+    RETURN TRUE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.admin_toggle_user_access IS 'Permet à un admin d''activer/désactiver l''accès d''un utilisateur';
+
+-- ---------------------------------------------------------------------
 -- 2.11 FONCTION: get_bn_members (pour dropdown BN dans claims)
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.get_bn_members()

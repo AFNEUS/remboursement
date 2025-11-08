@@ -76,6 +76,25 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function toggleUserAccess(userId: string, currentStatus: boolean) {
+    const action = currentStatus ? 'désactiver' : 'activer';
+    if (!confirm(`Confirmer ${action} l'accès de cet utilisateur ?\n\n${currentStatus ? '⚠️ L\'utilisateur ne pourra plus se connecter' : '✅ L\'utilisateur pourra se connecter'}`)) return;
+
+    try {
+      const { error } = await supabase.rpc('admin_toggle_user_access', {
+        target_user_id: userId,
+        new_is_active: !currentStatus
+      });
+
+      if (error) throw error;
+
+      alert(`✅ Accès ${currentStatus ? 'désactivé' : 'activé'} avec succès`);
+      loadData();
+    } catch (error: any) {
+      alert(`❌ Erreur: ${error.message}`);
+    }
+  }
+
   const ROLE_LABELS: Record<string, { label: string; color: string }> = {
     'ADMIN': { label: '👨‍💼 Admin', color: 'bg-red-100 text-red-800 border-red-300' },
     'TREASURER': { label: '💰 Trésorier', color: 'bg-green-100 text-green-800 border-green-300' },
@@ -116,22 +135,29 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
           <div className="text-sm text-gray-600 mb-1">Total utilisateurs</div>
           <div className="text-2xl font-bold">{users.length}</div>
+          <div className="text-xs text-gray-500 mt-1">
+            ✅ {users.filter(u => u.is_active).length} actifs
+          </div>
         </div>
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
           <div className="text-sm text-gray-600 mb-1">Administrateurs</div>
-          <div className="text-2xl font-bold">{users.filter(u => u.role === 'ADMIN' || u.role === 'admin_asso').length}</div>
+          <div className="text-2xl font-bold">{users.filter(u => u.role === 'admin_asso').length}</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+          <div className="text-sm text-gray-600 mb-1">Trésorier</div>
+          <div className="text-2xl font-bold">{users.filter(u => u.role === 'treasurer').length}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
           <div className="text-sm text-gray-600 mb-1">Bureau National</div>
-          <div className="text-2xl font-bold">{users.filter(u => u.status === 'BN').length}</div>
+          <div className="text-2xl font-bold">{users.filter(u => u.role === 'bn_member').length}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4 border-l-4 border-gray-500">
-          <div className="text-sm text-gray-600 mb-1">Membres</div>
-          <div className="text-2xl font-bold">{users.filter(u => u.status === 'MEMBER').length}</div>
+          <div className="text-sm text-gray-600 mb-1">Membres simples</div>
+          <div className="text-2xl font-bold">{users.filter(u => u.role === 'user').length}</div>
         </div>
       </div>
 
@@ -211,10 +237,13 @@ export default function AdminUsersPage() {
                     <div className="flex items-center">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          {user.first_name} {user.last_name}
+                          {user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email.split('@')[0]}
                         </div>
                         {user.id === currentUser?.id && (
                           <div className="text-xs text-indigo-600 font-medium">✨ C&apos;est vous</div>
+                        )}
+                        {!user.is_active && (
+                          <div className="text-xs text-red-600 font-medium">🚫 Désactivé</div>
                         )}
                       </div>
                     </div>
@@ -245,9 +274,24 @@ export default function AdminUsersPage() {
                       {STATUS_LABELS[user.status]?.label || user.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div className="text-xs">
-                      Inscrit le {new Date(user.created_at).toLocaleDateString('fr-FR')}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => toggleUserAccess(user.id, user.is_active)}
+                        disabled={user.id === currentUser?.id}
+                        className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                          user.id === currentUser?.id
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : user.is_active
+                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        }`}
+                      >
+                        {user.is_active ? '🚫 Bloquer accès' : '✅ Autoriser accès'}
+                      </button>
+                      <div className="text-xs text-gray-500">
+                        Inscrit le {new Date(user.created_at).toLocaleDateString('fr-FR')}
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -257,10 +301,27 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {filteredUsers.length === 0 && (
+      {users.length === 0 && (
+        <div className="text-center py-12 bg-white rounded-lg shadow">
+          <div className="text-4xl mb-4">👥</div>
+          <p className="text-gray-600 mb-4">Aucun utilisateur trouvé dans la base de données</p>
+          <p className="text-sm text-gray-500 mb-6">
+            Les utilisateurs apparaîtront ici après leur première connexion.<br/>
+            Ils sont créés automatiquement depuis la liste blanche (authorized_users).
+          </p>
+          <button
+            onClick={loadData}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            🔄 Recharger
+          </button>
+        </div>
+      )}
+
+      {users.length > 0 && filteredUsers.length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <div className="text-4xl mb-4">🔍</div>
-          <p className="text-gray-600">Aucun utilisateur trouvé</p>
+          <p className="text-gray-600">Aucun utilisateur trouvé avec ce filtre</p>
         </div>
       )}
     </div>
