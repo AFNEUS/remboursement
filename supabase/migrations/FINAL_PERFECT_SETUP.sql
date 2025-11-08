@@ -76,7 +76,7 @@ AS $$
         ORDER BY whitelist_created_at ASC, user_created_at DESC;
 $$;
 
-COMMENT ON FUNCTION public.get_all_user_profiles IS 'Liste complète des utilisateurs autorisés (whitelist + users), même sans connexion, pour l\'admin';
+COMMENT ON FUNCTION public.get_all_user_profiles IS 'Liste complète des utilisateurs autorisés (whitelist + users), même sans connexion, pour l''admin';
 -- =====================================================================
 -- AFNEUS REMBOURSEMENT - SETUP FINAL PARFAIT ET UNIQUE
 -- =====================================================================
@@ -223,7 +223,6 @@ CREATE TABLE public.users (
     CONSTRAINT valid_iban CHECK (iban IS NULL OR length(iban) BETWEEN 15 AND 34)
 );
 
--- Index optimisés
 CREATE INDEX idx_users_email ON public.users(email) WHERE is_active = true;
 CREATE INDEX idx_users_role ON public.users(role) WHERE is_active = true;
 CREATE INDEX idx_users_active ON public.users(is_active);
@@ -232,6 +231,86 @@ CREATE INDEX idx_users_created ON public.users(created_at DESC);
 COMMENT ON TABLE public.users IS 'Utilisateurs du système avec rôles et permissions';
 COMMENT ON COLUMN public.users.role IS 'Rôle technique DB (lowercase): admin_asso, treasurer, validator, bn_member, user';
 COMMENT ON COLUMN public.users.status IS 'Status affiché UI (uppercase): ADMIN, BN, TREASURER, VALIDATOR, MEMBER';
+
+-- ---------------------------------------------------------------------
+-- 2.X VUE: user_profile (whitelist + users + infos de connexion)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE VIEW public.user_profile AS
+SELECT
+    au.email AS email,
+    au.first_name AS whitelist_first_name,
+    au.last_name AS whitelist_last_name,
+    au.role AS whitelist_role,
+    au.notes AS whitelist_notes,
+    au.created_at AS whitelist_created_at,
+    u.id AS user_id,
+    u.full_name,
+    u.first_name,
+    u.last_name,
+    u.role AS user_role,
+    u.status,
+    u.phone,
+    u.iban,
+    u.iban_verified,
+    u.is_active,
+    u.created_at AS user_created_at,
+    u.updated_at,
+    u.last_login_at,
+    u.metadata,
+    u.address,
+    u.pole,
+    u.association_id
+FROM public.authorized_users au
+LEFT JOIN public.users u ON LOWER(au.email) = LOWER(u.email);
+
+COMMENT ON VIEW public.user_profile IS 'Vue combinant la whitelist (authorized_users) et les infos de connexion/profil (users)';
+
+-- ---------------------------------------------------------------------
+-- 2.X FONCTION ADMIN: get_all_user_profiles (pour admin users page)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_all_user_profiles()
+RETURNS TABLE (
+    email TEXT,
+    whitelist_first_name TEXT,
+    whitelist_last_name TEXT,
+    whitelist_role TEXT,
+    whitelist_notes TEXT,
+    whitelist_created_at TIMESTAMPTZ,
+    user_id UUID,
+    full_name TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    user_role TEXT,
+    status TEXT,
+    phone TEXT,
+    iban TEXT,
+    iban_verified BOOLEAN,
+    is_active BOOLEAN,
+    user_created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ,
+    last_login_at TIMESTAMPTZ,
+    metadata JSONB,
+    address TEXT,
+    pole TEXT,
+    association_id UUID
+)
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+        SELECT 
+            email, whitelist_first_name, whitelist_last_name, whitelist_role, whitelist_notes, whitelist_created_at,
+            user_id, full_name, first_name, last_name, user_role, status, phone, iban, iban_verified, is_active, user_created_at, updated_at, last_login_at, metadata, address, pole, association_id
+        FROM public.user_profile
+        WHERE EXISTS (
+                SELECT 1 FROM public.users u2
+                WHERE u2.id = auth.uid()
+                AND u2.role = 'admin_asso'
+        )
+        ORDER BY whitelist_created_at ASC, user_created_at DESC;
+$$;
+
+COMMENT ON FUNCTION public.get_all_user_profiles IS 'Liste complète des utilisateurs autorisés (whitelist + users), même sans connexion, pour l''admin';
 
 -- ---------------------------------------------------------------------
 -- 1.3 TABLE: events (UNIFIÉ sur start_date/end_date)

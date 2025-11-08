@@ -264,6 +264,21 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="block text-xs font-semibold mb-1">{displayRole}</span>
+                      {user.user_id && user.user_id !== currentUser?.id && (
+                        <div className="mt-1">
+                          <select
+                            value={user.user_role || user.role || user.whitelist_role || 'user'}
+                            onChange={e => updateUserRole(user.user_id, e.target.value)}
+                            className="text-xs border rounded px-2 py-1"
+                          >
+                            <option value="admin_asso">Admin</option>
+                            <option value="treasurer">Trésorier</option>
+                            <option value="validator">Validateur</option>
+                            <option value="bn_member">BN</option>
+                            <option value="user">Membre</option>
+                          </select>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold inline-block ${

@@ -57,7 +57,7 @@ export default function NewClaimPage() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>('');
-  const [bnMembers, setBnMembers] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [selectedBnMember, setSelectedBnMember] = useState<string>('');
   const [motive, setMotive] = useState('');
   const [events, setEvents] = useState<any[]>([]);
@@ -91,7 +91,7 @@ export default function NewClaimPage() {
   
   useEffect(() => {
     if (userRole === 'admin_asso') {
-      loadBNMembers();
+  loadAllUsers();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userRole]);
@@ -135,14 +135,13 @@ export default function NewClaimPage() {
     setCheckingAuth(false);
   }
   
-  async function loadBNMembers() {
+  async function loadAllUsers() {
     try {
-      const { data, error } = await supabase.rpc('get_bn_members');
+      const { data, error } = await supabase.rpc('get_all_user_profiles');
       if (error) throw error;
-      setBnMembers((data as any[]) || []);
+      setAllUsers((data as any[]) || []);
     } catch (error) {
-      console.error('Erreur chargement membres BN:', error);
-      // Si erreur (non admin), on ignore silencieusement
+      console.error('Erreur chargement utilisateurs:', error);
     }
   }
   
@@ -404,7 +403,7 @@ export default function NewClaimPage() {
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* ADMIN: Sélection membre BN */}
-          {userRole === 'admin_asso' && bnMembers.length > 0 && (
+          {userRole === 'admin_asso' && allUsers.length > 0 && (
             <div className="md:col-span-2">
               <label className="block text-sm font-semibold mb-2">
                 👤 Créer la demande au nom de (optionnel)
@@ -415,9 +414,9 @@ export default function NewClaimPage() {
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-purple-50"
               >
                 <option value="">📝 Ma propre demande (moi-même)</option>
-                {bnMembers.map(member => (
-                  <option key={member.id} value={member.id}>
-                    {member.full_name || `${member.first_name} ${member.last_name}`} ({member.email})
+                {allUsers.map(user => (
+                  <option key={user.user_id || user.email} value={user.user_id || ''}>
+                    {user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || `${user.whitelist_first_name || ''} ${user.whitelist_last_name || ''}`.trim() || user.email.split('@')[0]} ({user.email})
                   </option>
                 ))}
               </select>
