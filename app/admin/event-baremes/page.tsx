@@ -509,9 +509,9 @@ function StatsRecap({ eventId }: { eventId: string }) {
 
     if (data) {
       const total = data.length;
-      const validated = data.filter(d => d.status === 'VALIDATED' || d.status === 'PAID').length;
-      const pending = data.filter(d => d.status === 'PENDING').length;
-      const rejected = data.filter(d => d.status === 'REJECTED').length;
+      const validated = data.filter(d => d.status === 'validated' || d.status === 'paid').length;
+      const pending = data.filter(d => d.status === 'submitted' || d.status === 'to_validate').length;
+      const rejected = data.filter(d => d.status === 'refused').length;
 
       const bnClaims = data.filter(d => d.users.status === 'BN');
       const adminClaims = data.filter(d => d.users.status === 'ADMIN');

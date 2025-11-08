@@ -90,11 +90,11 @@ export default function DashboardPage() {
       // Note: Vues statistiques à créer ultérieurement
       // Pour l'instant, requêtes basiques
       
-      // Charger demandes en attente
-      const { data: pendingClaims } = await supabase
+            // Charger récents claims en attente
+      const { data: recentClaims } = await supabase
         .from('expense_claims')
         .select('*, users(full_name, email)')
-        .in('status', ['submitted', 'pending'])
+        .in('status', ['submitted', 'to_validate', 'incomplete'])
         .order('created_at', { ascending: false })
         .limit(10);
 

@@ -76,24 +76,6 @@ export default function AdminUsersPage() {
     }
   }
 
-  async function updateUserStatus(userId: string, newStatus: string) {
-    if (!confirm(`Confirmer le changement de statut ?`)) return;
-
-    try {
-      const { error } = await supabase.rpc('admin_update_user_status', {
-        target_user_id: userId,
-        new_status: newStatus
-      });
-
-      if (error) throw error;
-
-      alert('✅ Statut mis à jour');
-      loadData();
-    } catch (error: any) {
-      alert(`❌ Erreur: ${error.message}`);
-    }
-  }
-
   const ROLE_LABELS: Record<string, { label: string; color: string }> = {
     'ADMIN': { label: '👨‍💼 Admin', color: 'bg-red-100 text-red-800 border-red-300' },
     'TREASURER': { label: '💰 Trésorier', color: 'bg-green-100 text-green-800 border-green-300' },
@@ -249,25 +231,19 @@ export default function AdminUsersPage() {
                       }`}
                       disabled={user.id === currentUser?.id}
                     >
-                      <option value="ADMIN">👨‍💼 Admin</option>
-                      <option value="TREASURER">💰 Trésorier</option>
-                      <option value="VALIDATOR">✅ Validateur</option>
-                      <option value="MEMBER">👤 Membre</option>
+                      <option value="admin_asso">👨‍💼 Admin</option>
+                      <option value="treasurer">💰 Trésorier</option>
+                      <option value="validator">✅ Validateur</option>
+                      <option value="bn_member">⭐ Membre BN</option>
+                      <option value="user">👤 Membre simple</option>
                     </select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={user.status}
-                      onChange={(e) => updateUserStatus(user.id, e.target.value)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold inline-block ${
                         STATUS_LABELS[user.status]?.color || 'bg-gray-100 text-gray-800'
-                      }`}
-                      disabled={user.id === currentUser?.id}
-                    >
-                      <option value="ADMIN">🔴 Super Admin</option>
-                      <option value="BN">⭐ Bureau National</option>
-                      <option value="MEMBER">👥 Membre</option>
-                    </select>
+                      }`}>
+                      {STATUS_LABELS[user.status]?.label || user.status}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="text-xs">

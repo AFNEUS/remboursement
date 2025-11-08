@@ -89,6 +89,7 @@ COMMENT ON TABLE public.authorized_users IS 'Liste blanche des utilisateurs auto
 -- Insérer immédiatement les 12 membres
 INSERT INTO public.authorized_users (email, first_name, last_name, role, notes) VALUES
     ('mohameddhia.ounally@afneus.org', 'Mohamed Dhia', 'Ounally', 'admin_asso', 'Super Admin - Président AFNEUS - Accès total système'),
+    ('yannis.loumouamou@afneus.org', 'Yannis', 'Loumouamou', 'treasurer', 'Trésorier + Validateur BN 2024-2025'),
     ('agathe.bares@afneus.org', 'Agathe', 'Bares', 'bn_member', 'Bureau National 2024-2025'),
     ('anneclaire.beauvais@afneus.org', 'Anne-Claire', 'Beauvais', 'bn_member', 'Bureau National 2024-2025'),
     ('corentin.chadirac@afneus.org', 'Corentin', 'Chadirac', 'bn_member', 'Bureau National 2024-2025'),
@@ -98,8 +99,7 @@ INSERT INTO public.authorized_users (email, first_name, last_name, role, notes) 
     ('manon.soubeyrand@afneus.org', 'Manon', 'Soubeyrand', 'bn_member', 'Bureau National 2024-2025'),
     ('rebecca.roux@afneus.org', 'Rebecca', 'Roux', 'bn_member', 'Bureau National 2024-2025'),
     ('salome.lance-richardot@afneus.org', 'Salomé', 'Lance-Richardot', 'bn_member', 'Bureau National 2024-2025'),
-    ('thomas.dujak@afneus.org', 'Thomas', 'Dujak', 'bn_member', 'Bureau National 2024-2025'),
-    ('yannis.loumouamou@afneus.org', 'Yannis', 'Loumouamou', 'bn_member', 'Bureau National 2024-2025');
+    ('thomas.dujak@afneus.org', 'Thomas', 'Dujak', 'bn_member', 'Bureau National 2024-2025');
 
 -- ---------------------------------------------------------------------
 -- 1.2 TABLE: users (SANS RLS pour éviter cercle vicieux)
@@ -180,6 +180,8 @@ CREATE TABLE public.events (
     max_train_amount DECIMAL(10,2),
     max_hotel_per_night DECIMAL(10,2),
     max_meal_amount DECIMAL(10,2),
+    -- Types de dépenses autorisées pour cet événement (modifiable par admin)
+    allowed_expense_types TEXT[] DEFAULT ARRAY['car','train','transport','meal','hotel','registration','other']::text[],
     
     -- Audit
     created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
@@ -202,20 +204,26 @@ CREATE TABLE public.event_baremes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
     expense_type TEXT NOT NULL
-        CHECK (expense_type IN ('train', 'avion', 'covoiturage', 'hebergement')),
+        CHECK (expense_type IN ('car', 'train', 'transport', 'meal', 'hotel', 'registration', 'parking', 'taxi', 'other')),
     
-    -- Taux par rôle
+    -- Taux par rôle (pour calculs automatiques)
     bn_rate DECIMAL(6,4) NOT NULL DEFAULT 0.65,
     admin_rate DECIMAL(6,4) NOT NULL DEFAULT 0.80,
     other_rate DECIMAL(6,4) NOT NULL DEFAULT 0.50,
     
+    -- Plafonds
     max_amount DECIMAL(10,2),
     notes TEXT,
-    auto_calculated BOOLEAN DEFAULT false,
+    
+    -- Distance pour frais kilométriques
+    distance_km DECIMAL(10,2),
     
     -- Prix SNCF si applicable
     sncf_price_young DECIMAL(10,2),
     sncf_price_standard DECIMAL(10,2),
+    
+    -- Ce type est-il AUTORISÉ pour cet événement ?
+    is_allowed BOOLEAN DEFAULT true NOT NULL,
     
     last_updated TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -533,6 +541,41 @@ CREATE TRIGGER trg_event_baremes_updated BEFORE UPDATE ON public.event_baremes
 
 CREATE TRIGGER trg_train_baremes_updated BEFORE UPDATE ON public.train_baremes
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ---------------------------------------------------------------------
+-- 2.1b FONCTION: auto_calculate_claim_amounts (trigger expense_claims)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.auto_calculate_claim_amounts()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_calc JSONB;
+BEGIN
+    -- Calculer automatiquement si amount_ttc présent et pas déjà calculé
+    IF NEW.amount_ttc > 0 AND (NEW.calculated_amount IS NULL OR TG_OP = 'INSERT') THEN
+        v_calc := public.calculate_claim_amount(
+            NEW.user_id,
+            NEW.event_id,
+            NEW.expense_type,
+            NEW.amount_ttc,
+            NEW.distance_km
+        );
+        
+        NEW.calculated_amount := (v_calc->>'calculated_amount')::DECIMAL(10,2);
+        NEW.reimbursable_amount := (v_calc->>'reimbursable_amount')::DECIMAL(10,2);
+        NEW.taux_applied := (v_calc->>'taux_applied')::DECIMAL(6,4);
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_claims_auto_calculate BEFORE INSERT OR UPDATE ON public.expense_claims
+    FOR EACH ROW EXECUTE FUNCTION public.auto_calculate_claim_amounts();
+
+COMMENT ON FUNCTION public.auto_calculate_claim_amounts IS 'Calcule automatiquement calculated_amount et reimbursable_amount avant INSERT/UPDATE';
 
 -- ---------------------------------------------------------------------
 -- 2.2 FONCTION: handle_new_user (trigger auth.users INSERT)
@@ -900,44 +943,7 @@ $$;
 COMMENT ON FUNCTION public.admin_update_user_role IS 'Permet à un admin de modifier le rôle d''un utilisateur';
 
 -- ---------------------------------------------------------------------
--- 2.11 FONCTION ADMIN: admin_update_user_status
--- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.admin_update_user_status(
-    target_user_id UUID,
-    new_status TEXT
-)
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-    -- Vérifier que l'appelant est admin
-    IF NOT EXISTS (
-        SELECT 1 FROM public.users
-        WHERE id = auth.uid()
-        AND role = 'admin_asso'
-    ) THEN
-        RAISE EXCEPTION 'Accès refusé - Admin uniquement';
-    END IF;
-    
-    -- Valider le statut
-    IF new_status NOT IN ('active', 'inactive', 'pending', 'banned') THEN
-        RAISE EXCEPTION 'Statut invalide';
-    END IF;
-    
-    -- Update le statut
-    UPDATE public.users
-    SET status = new_status, updated_at = NOW()
-    WHERE id = target_user_id;
-    
-    RETURN TRUE;
-END;
-$$;
-
-COMMENT ON FUNCTION public.admin_update_user_status IS 'Permet à un admin de modifier le statut d''un utilisateur';
-
--- ---------------------------------------------------------------------
--- 2.12 FONCTION: get_bn_members (pour dropdown BN dans claims)
+-- 2.11 FONCTION: get_bn_members (pour dropdown BN dans claims)
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.get_bn_members()
 RETURNS TABLE (
@@ -964,6 +970,294 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.get_bn_members IS 'Liste les membres BN - accès admin uniquement';
+
+-- ---------------------------------------------------------------------
+-- 2.12 FONCTION: submit_claim (validation métier avant soumission)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.submit_claim(p_claim_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_claim RECORD;
+    v_justifs_count INTEGER;
+    v_errors TEXT[] := ARRAY[]::TEXT[];
+BEGIN
+    -- Récupérer la claim
+    SELECT * INTO v_claim
+    FROM public.expense_claims
+    WHERE id = p_claim_id
+    AND user_id = auth.uid();
+    
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Demande introuvable ou accès refusé');
+    END IF;
+    
+    -- Vérifier que le statut est draft
+    IF v_claim.status != 'draft' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Seules les demandes en brouillon peuvent être soumises');
+    END IF;
+    
+    -- Validations métier
+    IF v_claim.amount_ttc <= 0 THEN
+        v_errors := array_append(v_errors, 'Le montant doit être supérieur à 0');
+    END IF;
+    
+    IF v_claim.expense_date > CURRENT_DATE THEN
+        v_errors := array_append(v_errors, 'La date de dépense ne peut pas être dans le futur');
+    END IF;
+    
+    IF v_claim.expense_type IN ('car', 'train', 'hotel') THEN
+        SELECT COUNT(*) INTO v_justifs_count
+        FROM public.justificatifs
+        WHERE expense_claim_id = p_claim_id;
+        
+        IF v_justifs_count = 0 THEN
+            v_errors := array_append(v_errors, 'Des justificatifs sont obligatoires pour ce type de dépense');
+        END IF;
+    END IF;
+    
+    -- Si erreurs, passer en incomplete
+    IF array_length(v_errors, 1) > 0 THEN
+        UPDATE public.expense_claims
+        SET status = 'incomplete', updated_at = NOW()
+        WHERE id = p_claim_id;
+        
+        RETURN jsonb_build_object(
+            'success', false,
+            'status', 'incomplete',
+            'errors', array_to_json(v_errors)
+        );
+    END IF;
+    
+    -- Soumettre la demande
+    UPDATE public.expense_claims
+    SET 
+        status = 'submitted',
+        submitted_at = NOW(),
+        has_justificatifs = (v_justifs_count > 0),
+        updated_at = NOW()
+    WHERE id = p_claim_id;
+    
+    RETURN jsonb_build_object(
+        'success', true,
+        'status', 'submitted',
+        'message', 'Demande soumise avec succès'
+    );
+END;
+$$;
+
+COMMENT ON FUNCTION public.submit_claim IS 'Soumet une demande après validations métier - passe en incomplete si manque justifs';
+
+-- ---------------------------------------------------------------------
+-- 2.13 FONCTION: update_claim_status (pour validator/treasurer)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.update_claim_status(
+    p_claim_id UUID,
+    p_new_status TEXT,
+    p_comment TEXT DEFAULT NULL,
+    p_validated_amount DECIMAL(10,2) DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_claim RECORD;
+BEGIN
+    -- Vérifier que l'utilisateur est staff
+    IF NOT public.is_staff() THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Accès refusé - Staff uniquement');
+    END IF;
+    
+    -- Vérifier statut valide
+    IF p_new_status NOT IN ('validated', 'refused', 'to_validate') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Statut invalide');
+    END IF;
+    
+    -- Récupérer la claim
+    SELECT * INTO v_claim FROM public.expense_claims WHERE id = p_claim_id;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Demande introuvable');
+    END IF;
+    
+    -- Mettre à jour
+    UPDATE public.expense_claims
+    SET
+        status = p_new_status,
+        validation_comment = COALESCE(p_comment, validation_comment),
+        validated_amount = COALESCE(p_validated_amount, validated_amount),
+        validated_at = CASE WHEN p_new_status = 'validated' THEN NOW() ELSE validated_at END,
+        validated_by = CASE WHEN p_new_status = 'validated' THEN auth.uid() ELSE validated_by END,
+        validator_id = CASE WHEN p_new_status IN ('validated', 'refused') THEN auth.uid() ELSE validator_id END,
+        refusal_reason = CASE WHEN p_new_status = 'refused' THEN p_comment ELSE refusal_reason END,
+        updated_at = NOW()
+    WHERE id = p_claim_id;
+    
+    RETURN jsonb_build_object(
+        'success', true,
+        'status', p_new_status,
+        'message', 'Statut mis à jour'
+    );
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_claim_status IS 'Mise à jour statut demande par validator/treasurer avec commentaire';
+
+-- ---------------------------------------------------------------------
+-- 2.14 FONCTION: calculate_claim_amount (calcul intelligent)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.calculate_claim_amount(
+    p_user_id UUID,
+    p_event_id UUID,
+    p_expense_type TEXT,
+    p_amount_ttc DECIMAL(10,2),
+    p_distance_km DECIMAL(8,2) DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_role TEXT;
+    v_base_rate DECIMAL(6,4);
+    v_event_bareme RECORD;
+    v_plafond DECIMAL(10,2);
+    v_calculated DECIMAL(10,2);
+    v_reimbursable DECIMAL(10,2);
+    v_train_refund DECIMAL(10,2);
+BEGIN
+    -- Récupérer le rôle utilisateur
+    SELECT role INTO v_user_role FROM public.users WHERE id = p_user_id;
+    
+    -- Déterminer le taux de base selon le rôle
+    SELECT taux INTO v_base_rate
+    FROM public.taux_remboursement
+    WHERE role = CASE v_user_role
+        WHEN 'admin_asso' THEN 'admin_asso'
+        WHEN 'bn_member' THEN 'bn_member'
+        ELSE 'user'
+    END
+    AND valid_to IS NULL
+    LIMIT 1;
+    
+    -- Si événement, vérifier barème spécifique
+    IF p_event_id IS NOT NULL THEN
+        SELECT * INTO v_event_bareme
+        FROM public.event_baremes
+        WHERE event_id = p_event_id
+        AND expense_type = p_expense_type
+        AND is_allowed = true;
+        
+        IF FOUND THEN
+            -- Utiliser le taux de l'événement selon le rôle
+            v_base_rate := CASE v_user_role
+                WHEN 'admin_asso' THEN v_event_bareme.admin_rate
+                WHEN 'bn_member' THEN v_event_bareme.bn_rate
+                ELSE v_event_bareme.other_rate
+            END;
+            v_plafond := v_event_bareme.max_amount;
+        END IF;
+    END IF;
+    
+    -- Récupérer plafond général si pas d'événement
+    IF v_plafond IS NULL THEN
+        SELECT plafond_unitaire INTO v_plafond
+        FROM public.plafonds
+        WHERE expense_type = p_expense_type
+        AND valid_to IS NULL
+        LIMIT 1;
+    END IF;
+    
+    -- Calcul train spécial (basé sur distance)
+    IF p_expense_type = 'train' AND p_distance_km IS NOT NULL THEN
+        v_train_refund := public.calculate_train_refund(p_distance_km::INTEGER, p_amount_ttc);
+        v_calculated := v_train_refund;
+    ELSE
+        -- Calcul standard: montant * taux
+        v_calculated := p_amount_ttc * v_base_rate;
+    END IF;
+    
+    -- Appliquer plafond
+    IF v_plafond IS NOT NULL THEN
+        v_reimbursable := LEAST(v_calculated, v_plafond);
+    ELSE
+        v_reimbursable := v_calculated;
+    END IF;
+    
+    RETURN jsonb_build_object(
+        'calculated_amount', ROUND(v_calculated, 2),
+        'reimbursable_amount', ROUND(v_reimbursable, 2),
+        'taux_applied', v_base_rate,
+        'plafond_applied', v_plafond,
+        'user_role', v_user_role
+    );
+END;
+$$;
+
+COMMENT ON FUNCTION public.calculate_claim_amount IS 'Calcule le montant remboursable basé sur rôle, événement, type dépense et plafonds';
+
+-- ---------------------------------------------------------------------
+-- 2.15 FONCTION: get_claims_for_validation (optimisé pour validator)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_claims_for_validation(
+    p_status TEXT DEFAULT 'submitted'
+)
+RETURNS TABLE (
+    claim_id UUID,
+    user_id UUID,
+    user_name TEXT,
+    user_email TEXT,
+    user_role TEXT,
+    event_id UUID,
+    event_name TEXT,
+    expense_type TEXT,
+    expense_date DATE,
+    description TEXT,
+    amount_ttc DECIMAL(10,2),
+    calculated_amount DECIMAL(10,2),
+    status TEXT,
+    submitted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ,
+    justificatifs_count INTEGER,
+    has_justificatifs BOOLEAN
+)
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT 
+        c.id AS claim_id,
+        c.user_id,
+        u.full_name AS user_name,
+        u.email AS user_email,
+        u.role AS user_role,
+        c.event_id,
+        e.name AS event_name,
+        c.expense_type,
+        c.expense_date,
+        c.description,
+        c.amount_ttc,
+        c.calculated_amount,
+        c.status,
+        c.submitted_at,
+        c.created_at,
+        COALESCE((
+            SELECT COUNT(*)::INTEGER 
+            FROM public.justificatifs j 
+            WHERE j.expense_claim_id = c.id
+        ), 0) AS justificatifs_count,
+        c.has_justificatifs
+    FROM public.expense_claims c
+    INNER JOIN public.users u ON c.user_id = u.id
+    LEFT JOIN public.events e ON c.event_id = e.id
+    WHERE c.status = p_status
+    AND public.is_staff()
+    ORDER BY c.submitted_at ASC NULLS LAST, c.created_at DESC;
+$$;
+
+COMMENT ON FUNCTION public.get_claims_for_validation IS 'Récupère toutes les demandes à valider avec infos complètes - optimisé pour page validator';
 
 -- =====================================================================
 -- PHASE 3: ROW LEVEL SECURITY (RLS)
@@ -1147,7 +1441,22 @@ INSERT INTO public.taux_remboursement (role, taux) VALUES
 ON CONFLICT (role, valid_from) DO NOTHING;
 
 -- ---------------------------------------------------------------------
--- 4.3 Plafonds par type de dépense
+-- 4.3 NOTE: Utilisateurs créés automatiquement
+-- ---------------------------------------------------------------------
+-- Les utilisateurs de public.users sont créés automatiquement par:
+-- 1. Le trigger handle_new_user lors du premier login Google OAuth
+-- 2. La fonction sync_current_user appelée lors du callback
+-- 3. Les rôles sont assignés depuis authorized_users (whitelist)
+--
+-- AUCUN INSERT manuel n'est nécessaire car gen_random_uuid() créerait
+-- des UUIDs qui ne matchent pas auth.users.id
+--
+-- Pour donner des droits admin:
+-- 1. L'utilisateur se connecte une première fois (compte créé)
+-- 2. L'admin modifie son role via l'interface /admin/users
+
+-- ---------------------------------------------------------------------
+-- 4.4 Plafonds par type de dépense
 -- ---------------------------------------------------------------------
 INSERT INTO public.plafonds (expense_type, plafond_unitaire, requires_validation) VALUES
     ('train', 200.00, false),
@@ -1183,7 +1492,7 @@ BEGIN
     -- Vérifier whitelist complète
     SELECT COUNT(*) INTO whitelist_count FROM public.authorized_users;
     IF whitelist_count < 12 THEN
-        RAISE WARNING '⚠️  Liste blanche incomplète: % utilisateurs (attendu: 12)', whitelist_count;
+        RAISE WARNING '⚠️  Liste blanche incomplète: % utilisateurs (attendu: 12 = 1 admin + 1 treasurer + 10 BN)', whitelist_count;
     END IF;
     
     -- Vérifier tables
@@ -1201,10 +1510,10 @@ BEGIN
     FROM pg_proc p
     JOIN pg_namespace n ON p.pronamespace = n.oid
     WHERE n.nspname = 'public'
-    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile', 'calculate_train_refund', 'is_staff', 'is_admin', 'get_all_users', 'admin_update_user_role', 'admin_update_user_status', 'get_bn_members');
+    AND p.proname IN ('sync_current_user', 'get_current_user_safe', 'handle_new_user', 'set_updated_at', 'update_user_profile', 'calculate_train_refund', 'is_staff', 'is_admin', 'get_all_users', 'admin_update_user_role', 'get_bn_members', 'submit_claim', 'update_claim_status', 'calculate_claim_amount', 'get_claims_for_validation');
     
-    IF functions_count < 12 THEN
-        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 12', functions_count;
+    IF functions_count < 15 THEN
+        RAISE EXCEPTION '❌ Fonctions manquantes: trouvées %, attendues 15', functions_count;
     END IF;
     
     -- Vérifier policies RLS
@@ -1222,11 +1531,12 @@ BEGIN
     RAISE NOTICE '╚════════════════════════════════════════════════════════════╝';
     RAISE NOTICE '';
     RAISE NOTICE '📊 STATISTIQUES:';
-    RAISE NOTICE '   • Whitelist: % utilisateurs autorisés', whitelist_count;
+    RAISE NOTICE '   • Whitelist: % utilisateurs autorisés (1 admin + 1 treasurer + 10 BN)', whitelist_count;
     RAISE NOTICE '   • Tables: % créées', tables_count;
     RAISE NOTICE '   • Fonctions: % créées', functions_count;
     RAISE NOTICE '   • Policies RLS: % actives', policies_count;
     RAISE NOTICE '   • Admin: Mohamed Dhia Ounally (admin_asso)';
+    RAISE NOTICE '   • Trésorier: Yannis Loumouamou (treasurer)';
     RAISE NOTICE '';
     RAISE NOTICE '🎉 SYSTÈME PRÊT - Déconnexion/reconnexion recommandée';
     RAISE NOTICE '';

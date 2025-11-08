@@ -8,7 +8,7 @@ import { searchCities, calculateDistance } from '@/lib/cities-france';
 import { calculateKilometricAmount, formatAmount } from '@/lib/calculations';
 import TrainJourneyForm from '@/components/TrainJourneyForm';
 
-type ExpenseType = 'CAR' | 'TRAIN' | 'BUS' | 'MEAL' | 'HOTEL' | 'OTHER';
+type ExpenseType = 'car' | 'train' | 'transport' | 'meal' | 'hotel' | 'registration' | 'other';
 
 interface Passenger {
   name: string;
@@ -64,7 +64,7 @@ export default function NewClaimPage() {
   const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [currentExpense, setCurrentExpense] = useState<Partial<ExpenseItem>>({
-    type: 'CAR',
+    type: 'car' as any,
     date: new Date().toISOString().split('T')[0],
     passengers: [],
   });
@@ -142,7 +142,13 @@ export default function NewClaimPage() {
       setBnMembers((data as any[]) || []);
     } catch (error) {
       console.error('Erreur chargement membres BN:', error);
+      // Si erreur (non admin), on ignore silencieusement
     }
+  }
+  
+  function loadBaremes() {
+    // Charger les tarifs depuis localStorage pour calculs
+    loadTarifs();
   }
   
   async function loadEvents() {
@@ -281,7 +287,7 @@ export default function NewClaimPage() {
     
     // Reset
     setCurrentExpense({
-      type: 'CAR',
+      type: 'car' as any,
       date: new Date().toISOString().split('T')[0],
       passengers: [],
     });
@@ -290,23 +296,27 @@ export default function NewClaimPage() {
     setDistance('');
   }
   
-  function getTheoreticalMax(type: ExpenseType): number {
+  function getTheoreticalMax(type: string): number {
+    // Pour les frais kilométriques, le max est calculé dynamiquement
     if (type === 'car' && currentExpense.theoreticalMax) {
       return currentExpense.theoreticalMax;
     }
     
+    // Mapper les types minuscules vers les clés majuscules des tarifs
     const tarifKey = {
-      'TRAIN': 'TRAIN',
-      'BUS': 'BUS',
-      'MEAL': 'MEAL',
-      'HOTEL': 'HOTEL',
-    }[type];
+      'train': 'TRAIN',
+      'transport': 'BUS',
+      'meal': 'MEAL',
+      'hotel': 'HOTEL',
+      'registration': 'OTHER',
+      'other': 'OTHER'
+    }[type as string];
     
     if (tarifKey && tarifs[tarifKey]) {
       return tarifs[tarifKey].max_amount || 999;
     }
     
-    return 999;
+    return 999; // Pas de plafond défini
   }
   
   function removeExpense(id: string) {
@@ -352,9 +362,9 @@ export default function NewClaimPage() {
           const path = `${claim.id}/${Date.now()}_${file.name}`;
           await supabase.storage.from('justificatifs').upload(path, file);
           await supabase.from('justificatifs').insert({
-            claim_id: claim.id,
-            filename: file.name,
-            storage_path: path,
+            expense_claim_id: claim.id,
+            file_name: file.name,
+            file_path: path,
             file_type: file.type,
             file_size: file.size,
           });
@@ -369,6 +379,12 @@ export default function NewClaimPage() {
       setLoading(false);
     }
   }
+
+  // Déterminer les types de dépenses autorisés en fonction de l'événement sélectionné
+  const selectedEventObj = events.find(ev => ev.id === selectedEvent);
+  const allowedExpenseValues: string[] = (selectedEventObj && selectedEventObj.allowed_expense_types)
+    ? selectedEventObj.allowed_expense_types
+    : EXPENSE_TYPES.map(t => t.value);
   
   if (checkingAuth) {
     return (
@@ -454,9 +470,11 @@ export default function NewClaimPage() {
               onChange={(e) => setCurrentExpense({ ...currentExpense, type: e.target.value as ExpenseType })}
               className="w-full px-4 py-2 border rounded-lg"
             >
-              {EXPENSE_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
+              {EXPENSE_TYPES
+                .filter(type => allowedExpenseValues.includes(type.value))
+                .map(type => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
             </select>
           </div>
           
