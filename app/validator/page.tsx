@@ -101,15 +101,11 @@ export default function ValidatorDashboard() {
   
   async function loadClaimDetails(claimId: string) {
     try {
-      const { data: items } = await supabase
-        .from('expense_items')
-        .select('*')
-        .eq('claim_id', claimId);
-
+      // Note: expense_items table n'existe plus, les détails sont dans expense_claims
       const { data: justificatifs } = await supabase
         .from('justificatifs')
         .select('*')
-        .eq('claim_id', claimId);
+        .eq('expense_claim_id', claimId);
 
       const claim = claims.find(c => c.id === claimId);
       if (claim) {

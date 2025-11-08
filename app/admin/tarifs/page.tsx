@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 
 interface TarifConfig {
@@ -14,14 +15,48 @@ interface TarifConfig {
 }
 
 export default function TarifsAdminPage() {
+  const router = useRouter();
   const [tarifs, setTarifs] = useState<TarifConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<TarifConfig>>({});
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    loadTarifs();
+    checkAdmin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function checkAdmin() {
+    const testUser = localStorage.getItem('test_user');
+    if (testUser) {
+      const parsed = JSON.parse(testUser);
+      if (parsed.role !== 'ADMIN') {
+        alert('❌ Accès refusé');
+        router.push('/');
+        return;
+      }
+      setCheckingAuth(false);
+      loadTarifs();
+      return;
+    }
+
+    const { data } = await supabase.rpc('get_current_user_safe');
+    if (!data || !Array.isArray(data) || (data as any[]).length === 0) {
+      router.push('/');
+      return;
+    }
+
+    const user = (data as any[])[0];
+    if (user.role !== 'admin_asso') {
+      alert('❌ Accès refusé');
+      router.push('/');
+      return;
+    }
+
+    setCheckingAuth(false);
+    loadTarifs();
+  }
 
   async function loadTarifs() {
     // Charger depuis la config ou créer des valeurs par défaut
@@ -66,7 +101,7 @@ export default function TarifsAdminPage() {
     setFormData(tarif);
   }
 
-  if (loading) {
+  if (checkingAuth || loading) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">⏳ Chargement...</div>

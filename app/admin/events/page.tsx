@@ -40,7 +40,6 @@ export default function EventsAdminPage() {
 
   useEffect(() => {
     loadUser();
-    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -48,6 +47,7 @@ export default function EventsAdminPage() {
     if (user) {
       loadEvents();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   async function loadUser() {

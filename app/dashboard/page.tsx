@@ -87,46 +87,34 @@ export default function DashboardPage() {
   async function loadDashboardData() {
     setLoading(true);
     try {
-      // Charger les statistiques globales
-      const { data: globalStats } = await supabase
-        .from('global_statistics')
-        .select('*')
-        .single();
-
-      // Charger comptabilité mensuelle
-      const { data: monthlyData } = await supabase
-        .from('monthly_accounting')
-        .select('*')
-        .order('month', { ascending: false })
-        .limit(6);
-
-      // Charger analyse covoiturage
-      const { data: carpoolingData } = await supabase
-        .from('carpooling_analysis')
-        .select('*')
-        .order('month', { ascending: false })
-        .limit(6);
-
+      // Note: Vues statistiques à créer ultérieurement
+      // Pour l'instant, requêtes basiques
+      
       // Charger demandes en attente
       const { data: pendingClaims } = await supabase
-        .from('claims_enriched')
-        .select('*')
-        .eq('status', 'submitted')
+        .from('expense_claims')
+        .select('*, users(full_name, email)')
+        .in('status', ['submitted', 'pending'])
         .order('created_at', { ascending: false })
         .limit(10);
 
       // Charger événements récents
       const { data: recentEvents } = await supabase
-        .from('event_statistics')
+        .from('events')
         .select('*')
         .gte('start_date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
         .order('start_date', { ascending: false })
         .limit(5);
 
+      // Stats basiques
+      const { count: totalClaims } = await supabase
+        .from('expense_claims')
+        .select('*', { count: 'exact', head: true });
+
       setData({
-        global: globalStats,
-        recent_months: monthlyData || [],
-        carpooling: carpoolingData || [],
+        global: { total_claims: totalClaims || 0 },
+        recent_months: [],
+        carpooling: [],
         pending_claims: pendingClaims || [],
         recent_events: recentEvents || [],
       });

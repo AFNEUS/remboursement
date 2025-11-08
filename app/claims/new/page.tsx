@@ -56,6 +56,9 @@ export default function NewClaimPage() {
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>('');
+  const [bnMembers, setBnMembers] = useState<any[]>([]);
+  const [selectedBnMember, setSelectedBnMember] = useState<string>('');
   const [motive, setMotive] = useState('');
   const [events, setEvents] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>('');
@@ -86,6 +89,13 @@ export default function NewClaimPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
+  useEffect(() => {
+    if (userRole === 'admin_asso') {
+      loadBNMembers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole]);
+  
   function loadTarifs() {
     const saved = localStorage.getItem('admin_tarifs');
     if (saved) {
@@ -101,7 +111,9 @@ export default function NewClaimPage() {
   async function loadUser() {
     const testUser = localStorage.getItem('test_user');
     if (testUser) {
-      setUser(JSON.parse(testUser));
+      const parsed = JSON.parse(testUser);
+      setUser(parsed);
+      setUserRole(parsed.role === 'ADMIN' ? 'admin_asso' : 'user');
       setCheckingAuth(false);
       return;
     }
@@ -111,8 +123,26 @@ export default function NewClaimPage() {
       router.push('/');
       return;
     }
+    
+    // Récupérer le rôle via RPC
+    const { data: userData } = await supabase.rpc('get_current_user_safe');
+    if (userData && Array.isArray(userData) && (userData as any[]).length > 0) {
+      const dbUser = (userData as any[])[0];
+      setUserRole(dbUser.role);
+    }
+    
     setUser(user);
     setCheckingAuth(false);
+  }
+  
+  async function loadBNMembers() {
+    try {
+      const { data, error } = await supabase.rpc('get_bn_members');
+      if (error) throw error;
+      setBnMembers((data as any[]) || []);
+    } catch (error) {
+      console.error('Erreur chargement membres BN:', error);
+    }
   }
   
   async function loadEvents() {
@@ -293,8 +323,11 @@ export default function NewClaimPage() {
     try {
       const total = expenses.reduce((sum, e) => sum + e.amount, 0);
       
+      // Si admin et membre BN sélectionné, créer pour ce membre, sinon pour soi-même
+      const targetUserId = selectedBnMember || user.id;
+      
       const claimData: any = {
-        user_id: user.id,
+        user_id: targetUserId,
         motive,
         total_amount: total,
         status: 'draft',
@@ -354,6 +387,30 @@ export default function NewClaimPage() {
       
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ADMIN: Sélection membre BN */}
+          {userRole === 'admin_asso' && bnMembers.length > 0 && (
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold mb-2">
+                👤 Créer la demande au nom de (optionnel)
+              </label>
+              <select
+                value={selectedBnMember}
+                onChange={(e) => setSelectedBnMember(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-purple-50"
+              >
+                <option value="">📝 Ma propre demande (moi-même)</option>
+                {bnMembers.map(member => (
+                  <option key={member.id} value={member.id}>
+                    {member.full_name || `${member.first_name} ${member.last_name}`} ({member.email})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                💡 En tant qu&apos;admin, vous pouvez créer une demande pour un membre BN. Elle apparaîtra dans leur compte.
+              </p>
+            </div>
+          )}
+          
           <div>
             <label className="block text-sm font-semibold mb-2">Motif de la demande *</label>
             <input
