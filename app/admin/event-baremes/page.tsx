@@ -127,6 +127,7 @@ export default function EventBaremesPage() {
       const response = await fetch('/api/sncf/prices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: inclure les cookies de session
         body: JSON.stringify({
           from: event.departure_city,
           to: event.location,
