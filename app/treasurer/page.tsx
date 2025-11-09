@@ -111,6 +111,7 @@ export default function TreasurerDashboard() {
       const response = await fetch('/api/export/sepa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: inclure les cookies de session
         body: JSON.stringify({
           claim_ids: Array.from(selectedClaims),
         }),
