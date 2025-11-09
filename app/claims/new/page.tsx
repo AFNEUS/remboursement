@@ -353,6 +353,7 @@ export default function NewClaimPage() {
       const response = await fetch('/api/claims/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: inclure les cookies de session
         body: JSON.stringify(claimData),
       });
       
