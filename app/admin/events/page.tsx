@@ -155,20 +155,21 @@ export default function AdminEventsPage() {
   // Load events
   async function loadEvents() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .order('start_date', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('start_date', { ascending: false });
 
-    if (error) {
+      if (error) throw error;
+      
+      setEvents(data || []);
+    } catch (error) {
       console.error('Erreur lors du chargement des événements:', error);
       alert('Erreur lors du chargement des événements');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setEvents(data || []);
-    setLoading(false);
   }
 
   // Reset form
@@ -222,27 +223,30 @@ export default function AdminEventsPage() {
     }
 
     setLoading(true);
-    const { error } = await supabase
-      .from('events')
-      .delete()
-      .eq('id', event.id);
+    try {
+      const response = await fetch(`/api/events?id=${event.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
 
-    if (error) {
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erreur lors de la suppression');
+      }
+
+      alert('✅ Événement supprimé avec succès');
+      await loadEvents();
+    } catch (error: any) {
       console.error('Erreur lors de la suppression:', error);
       alert('Erreur lors de la suppression : ' + error.message);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    alert('✅ Événement supprimé avec succès');
-    await loadEvents();
-    setLoading(false);
   }
 
   // Handle submit
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!supabase) return;
 
     setLoading(true);
 
@@ -265,19 +269,34 @@ export default function AdminEventsPage() {
       };
 
       if (editingEvent) {
-        // Update existing event
-        const { error } = await (supabase.from('events') as any)
-          .update(eventData)
-          .eq('id', editingEvent.id);
+        // Update existing event via API
+        const response = await fetch('/api/events', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ id: editingEvent.id, ...eventData }),
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Erreur lors de la modification');
+        }
+
         alert('✅ Événement modifié avec succès');
       } else {
-        // Create new event
-        const { error } = await (supabase.from('events') as any)
-          .insert([eventData]);
+        // Create new event via API
+        const response = await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(eventData),
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Erreur lors de la création');
+        }
+
         alert('✅ Événement créé avec succès');
       }
 

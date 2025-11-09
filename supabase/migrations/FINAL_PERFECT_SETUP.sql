@@ -1598,14 +1598,29 @@ COMMENT ON FUNCTION public.update_event IS 'Met à jour un événement - accès 
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- RLS: users (DÉSACTIVÉ - accès via RPC uniquement)
+-- RLS: users (ACTIVÉ avec policies restrictives)
 -- ---------------------------------------------------------------------
-ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
-COMMENT ON TABLE public.users IS 'Table users SANS RLS - accès via RPC get_current_user_safe() uniquement';
+-- Lecture: Seulement son propre profil
+CREATE POLICY users_select_own ON public.users
+    FOR SELECT
+    USING (id = auth.uid());
+
+-- Mise à jour: Seulement son propre profil (champs limités)
+CREATE POLICY users_update_own ON public.users
+    FOR UPDATE
+    USING (id = auth.uid());
+
+-- Admin peut tout voir
+CREATE POLICY users_admin_all ON public.users
+    FOR ALL
+    USING (public.is_admin());
+
+COMMENT ON TABLE public.users IS 'Table users AVEC RLS - accès restreint par policy';
 
 -- ---------------------------------------------------------------------
--- RLS: expense_claims (utilisateur + staff)
+-- RLS: expense_claims (lecture pour utilisateur, tout pour staff)
 -- ---------------------------------------------------------------------
 ALTER TABLE public.expense_claims ENABLE ROW LEVEL SECURITY;
 
@@ -1613,19 +1628,23 @@ DROP POLICY IF EXISTS claims_select_own ON public.expense_claims;
 DROP POLICY IF EXISTS claims_insert_own ON public.expense_claims;
 DROP POLICY IF EXISTS claims_update_own ON public.expense_claims;
 DROP POLICY IF EXISTS claims_staff_all ON public.expense_claims;
+DROP POLICY IF EXISTS claims_select_staff ON public.expense_claims;
 
+-- Utilisateur peut voir ses propres demandes
 CREATE POLICY claims_select_own ON public.expense_claims
     FOR SELECT
     USING (user_id = auth.uid());
 
-CREATE POLICY claims_insert_own ON public.expense_claims
-    FOR INSERT
-    WITH CHECK (user_id = auth.uid());
+-- Staff peut tout voir
+CREATE POLICY claims_select_staff ON public.expense_claims
+    FOR SELECT
+    USING (public.is_staff());
 
-CREATE POLICY claims_update_own ON public.expense_claims
-    FOR UPDATE
-    USING (user_id = auth.uid() AND status IN ('draft', 'incomplete'));
+-- INSERT/UPDATE/DELETE via API uniquement (avec supabaseAdmin)
+-- Pas de policy INSERT/UPDATE/DELETE pour utilisateurs normaux
+-- → Force l'utilisation de l'API backend qui vérifie les droits
 
+-- Staff peut tout faire (validation, etc.)
 CREATE POLICY claims_staff_all ON public.expense_claims
     FOR ALL
     USING (public.is_staff());

@@ -82,6 +82,20 @@ export default function NewClaimPage() {
   // Charger les tarifs depuis localStorage
   const [tarifs, setTarifs] = useState<any>({});
   
+  // Fermer les suggestions quand on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.city-autocomplete-container')) {
+        setShowDepartureSuggestions(false);
+        setShowArrivalSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
   useEffect(() => {
     loadUser();
     loadEvents();
@@ -500,11 +514,11 @@ export default function NewClaimPage() {
         
         {/* FRAIS KILOMÉTRIQUES */}
         {currentExpense.type === 'car' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 overflow-visible">
             <h3 className="font-semibold mb-3 text-blue-900">🚗 Configuration du trajet</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div className="relative">
+              <div className="relative city-autocomplete-container">
                 <label className="block text-sm font-semibold mb-2">Départ *</label>
                 <input
                   type="text"
@@ -512,9 +526,10 @@ export default function NewClaimPage() {
                   onChange={(e) => { setDeparture(e.target.value); handleCitySearch(e.target.value, true); }}
                   placeholder="Ville de départ"
                   className="w-full px-4 py-2 border rounded-lg"
+                  autoComplete="off"
                 />
                 {showDepartureSuggestions && citySuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                  <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                     {citySuggestions.map((city, i) => (
                       <div
                         key={i}
@@ -535,7 +550,7 @@ export default function NewClaimPage() {
                 )}
               </div>
               
-              <div className="relative">
+              <div className="relative city-autocomplete-container">
                 <label className="block text-sm font-semibold mb-2">Arrivée *</label>
                 <input
                   type="text"
@@ -543,9 +558,10 @@ export default function NewClaimPage() {
                   onChange={(e) => { setArrival(e.target.value); handleCitySearch(e.target.value, false); }}
                   placeholder="Ville d'arrivée"
                   className="w-full px-4 py-2 border rounded-lg"
+                  autoComplete="off"
                 />
                 {showArrivalSuggestions && citySuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                  <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                     {citySuggestions.map((city, i) => (
                       <div
                         key={i}
