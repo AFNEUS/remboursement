@@ -16,13 +16,22 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     
+    console.log('[API /api/claims/create] Nouvelle requête reçue');
+    
     // Vérifier l'authentification
     const { data: { session }, error: authError } = await supabase.auth.getSession();
+    
+    console.log('[API /api/claims/create] Session:', session ? 'Présente' : 'Absente');
+    console.log('[API /api/claims/create] Auth error:', authError);
+    
     if (authError || !session) {
+      console.error('[API /api/claims/create] Authentification échouée');
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
     
     const userId = session.user.id;
+    console.log('[API /api/claims/create] User ID:', userId);
+    
     const body = await request.json();
     
     // Récupérer le profil utilisateur
