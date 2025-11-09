@@ -330,30 +330,39 @@ export default function NewClaimPage() {
     
     setLoading(true);
     try {
+      // Créer la demande via l'API (qui bypass RLS de manière sécurisée)
+      // Pour l'instant, on prend la première dépense comme base (à améliorer)
+      const firstExpense = expenses[0];
       const total = expenses.reduce((sum, e) => sum + e.amount, 0);
       
-      // Si admin et membre BN sélectionné, créer pour ce membre, sinon pour soi-même
-      const targetUserId = selectedBnMember || user.id;
-      
       const claimData: any = {
-        user_id: targetUserId,
-        motive,
-        total_amount: total,
-        status: 'draft',
+        event_id: selectedEvent || null,
+        expense_type: firstExpense.type,
+        expense_date: firstExpense.date,
+        motive: motive,
+        description: expenses.map(e => e.description).join(' | '),
+        merchant_name: '',
+        amount_ttc: total,
+        currency: 'EUR',
+        departure_location: firstExpense.departure || null,
+        arrival_location: firstExpense.arrival || null,
+        distance_km: firstExpense.type === 'car' ? parseFloat(distance || '0') : null,
+        cv_fiscaux: firstExpense.type === 'car' ? parseInt(fiscalPower) : null,
       };
       
-      // Ajouter l'event_id si un événement est sélectionné
-      if (selectedEvent) {
-        claimData.event_id = selectedEvent;
+      const response = await fetch('/api/claims/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(claimData),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Erreur lors de la création');
       }
       
-      const { data: claim, error } = await supabase
-        .from('expense_claims')
-        .insert(claimData)
-        .select()
-        .single();
-      
-      if (error) throw error;
+      const claim = result.claim;
       
       // Upload des justificatifs
       for (const expense of expenses) {

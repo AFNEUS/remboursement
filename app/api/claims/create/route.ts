@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       },
     };
     
-    const { data: claim, error: claimError } = await supabase
+    const { data: claim, error: claimError } = await supabaseAdmin
       .from('expense_claims')
       .insert(newClaim)
       .select()
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Créer une notification
-    await supabase.from('notifications').insert({
+    await supabaseAdmin.from('notifications').insert({
       user_id: userId,
       type: 'claim_created',
       title: 'Demande créée',

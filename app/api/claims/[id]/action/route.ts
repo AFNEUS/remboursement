@@ -140,7 +140,7 @@ export async function POST(
     }
     
     // Mettre à jour la demande
-    const { data: updatedClaim, error: updateError } = await supabase
+    const { data: updatedClaim, error: updateError } = await supabaseAdmin
       .from('expense_claims')
       .update(updateData)
       .eq('id', claimId)
@@ -153,7 +153,7 @@ export async function POST(
     }
     
     // Créer une notification
-    await supabase.from('notifications').insert({
+    await supabaseAdmin.from('notifications').insert({
       user_id: claim.user_id,
       type: notificationType,
       title: 'Mise à jour de votre demande',
