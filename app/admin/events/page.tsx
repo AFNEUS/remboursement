@@ -155,21 +155,20 @@ export default function AdminEventsPage() {
   // Load events
   async function loadEvents() {
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('start_date', { ascending: false });
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('start_date', { ascending: false });
 
-      if (error) throw error;
-      
-      setEvents(data || []);
-    } catch (error) {
+    if (error) {
       console.error('Erreur lors du chargement des événements:', error);
       alert('Erreur lors du chargement des événements');
-    } finally {
       setLoading(false);
+      return;
     }
+
+    setEvents(data || []);
+    setLoading(false);
   }
 
   // Reset form
@@ -223,33 +222,27 @@ export default function AdminEventsPage() {
     }
 
     setLoading(true);
-    try {
-      const response = await fetch(`/api/events?id=${event.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', event.id);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erreur lors de la suppression');
-      }
-
-      alert('✅ Événement supprimé avec succès');
-      await loadEvents();
-    } catch (error: any) {
+    if (error) {
       console.error('Erreur lors de la suppression:', error);
       alert('Erreur lors de la suppression : ' + error.message);
-    } finally {
       setLoading(false);
+      return;
     }
+
+    alert('✅ Événement supprimé avec succès');
+    await loadEvents();
+    setLoading(false);
   }
 
   // Handle submit
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
     setLoading(true);
-
     try {
       const eventData = {
         name: formData.name,
@@ -268,43 +261,30 @@ export default function AdminEventsPage() {
         allowed_expense_types: formData.allowed_expense_types,
       };
 
+      let response;
       if (editingEvent) {
-        // Update existing event via API
-        const response = await fetch('/api/events', {
+        // Update existing event
+        response = await fetch('/api/events', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ id: editingEvent.id, ...eventData }),
+          body: JSON.stringify({ id: editingEvent.id, ...eventData })
         });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Erreur lors de la modification');
-        }
-
-        alert('✅ Événement modifié avec succès');
       } else {
-        // Create new event via API
-        const response = await fetch('/api/events', {
+        // Create new event
+        response = await fetch('/api/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(eventData),
+          body: JSON.stringify(eventData)
         });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Erreur lors de la création');
-        }
-
-        alert('✅ Événement créé avec succès');
       }
-
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Erreur API');
+      alert(editingEvent ? '✅ Événement modifié avec succès' : '✅ Événement créé avec succès');
       resetForm();
       await loadEvents();
     } catch (error: any) {
       console.error('Erreur:', error);
-      alert('Erreur lors de la création/modification de l\'événement : ' + error.message);
+      alert('Erreur lors de la création/modification de l\'événement : ' + (error.message || error));
     } finally {
       setLoading(false);
     }
