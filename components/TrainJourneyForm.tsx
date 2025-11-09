@@ -61,6 +61,7 @@ export default function TrainJourneyForm({ onJourneyChange, initialDate }: Train
       const response = await fetch('/api/sncf/stations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: inclure les cookies de session
         body: JSON.stringify({ query }),
       });
 
