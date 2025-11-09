@@ -76,6 +76,7 @@ export default function AdminEventsPage() {
         const res = await fetch('/api/sncf/prices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include', // Important: inclure les cookies de session
           body: JSON.stringify({ 
             from: city.name, 
             to: destination, 
