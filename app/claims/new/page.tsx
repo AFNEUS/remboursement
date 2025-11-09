@@ -334,6 +334,10 @@ export default function NewClaimPage() {
       alert('Vous devez être connecté pour créer une demande. Merci de vous reconnecter.');
       return;
     }
+    
+    console.log('[Claims Submit] Début de la soumission');
+    console.log('[Claims Submit] User:', user);
+    
     setLoading(true);
     try {
       // Créer la demande via l'API (qui bypass RLS de manière sécurisée)
@@ -354,13 +358,22 @@ export default function NewClaimPage() {
         distance_km: firstExpense.type === 'car' ? parseFloat(distance || '0') : null,
         cv_fiscaux: firstExpense.type === 'car' ? parseInt(fiscalPower) : null,
       };
+      
+      console.log('[Claims Submit] Données à envoyer:', claimData);
+      
       const response = await fetch('/api/claims/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important: inclure les cookies de session
         body: JSON.stringify(claimData),
       });
+      
+      console.log('[Claims Submit] Réponse HTTP:', response.status);
+      
       const result = await response.json();
+      
+      console.log('[Claims Submit] Résultat JSON:', result);
+      
       if (!response.ok) {
         throw new Error(result.error || 'Erreur lors de la création');
       }
@@ -382,6 +395,7 @@ export default function NewClaimPage() {
       alert('✅ Demande créée avec succès !');
       router.push('/claims');
     } catch (error: any) {
+      console.error('[Claims Submit] Erreur:', error);
       alert('❌ Erreur : ' + error.message);
     } finally {
       setLoading(false);

@@ -155,20 +155,24 @@ export default function AdminEventsPage() {
   // Load events
   async function loadEvents() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .order('start_date', { ascending: false });
-
-    if (error) {
+    try {
+      const response = await fetch('/api/events', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setEvents(data || []);
+    } catch (error) {
       console.error('Erreur lors du chargement des événements:', error);
-      alert('Erreur lors du chargement des événements');
+      alert('❌ Erreur lors du chargement des événements: ' + (error as Error).message);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setEvents(data || []);
-    setLoading(false);
   }
 
   // Reset form
