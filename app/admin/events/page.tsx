@@ -244,42 +244,48 @@ export default function AdminEventsPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const eventData = {
-        name: formData.name,
-        description: formData.description,
-        event_type: formData.event_type,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        location: formData.location,
-        departure_city: formData.departure_city || null,
-        custom_km_cap: parseFloat(formData.custom_km_cap),
-        carpooling_bonus_cap_percent: parseFloat(formData.carpooling_bonus_cap_percent),
-        allow_carpooling_bonus: formData.allow_carpooling_bonus,
-        max_train_amount: formData.max_train_amount ? parseFloat(formData.max_train_amount) : null,
-        max_hotel_per_night: formData.max_hotel_per_night ? parseFloat(formData.max_hotel_per_night) : null,
-        max_meal_amount: formData.max_meal_amount ? parseFloat(formData.max_meal_amount) : null,
-        allowed_expense_types: formData.allowed_expense_types,
-      };
-
-      let response;
       if (editingEvent) {
-        // Update existing event
-        response = await fetch('/api/events', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: editingEvent.id, ...eventData })
-        });
+        // Update via RPC update_event
+        const { error } = await supabase.rpc('update_event', {
+          p_event_id: editingEvent.id,
+          p_name: formData.name,
+          p_description: formData.description,
+          p_event_type: formData.event_type,
+          p_start_date: formData.start_date,
+          p_end_date: formData.end_date,
+          p_location: formData.location,
+          p_departure_city: formData.departure_city || null,
+          p_custom_km_cap: parseFloat(formData.custom_km_cap),
+          p_carpooling_bonus_cap_percent: parseFloat(formData.carpooling_bonus_cap_percent),
+          p_allow_carpooling_bonus: formData.allow_carpooling_bonus,
+          p_max_train_amount: formData.max_train_amount ? parseFloat(formData.max_train_amount) : null,
+          p_max_hotel_per_night: formData.max_hotel_per_night ? parseFloat(formData.max_hotel_per_night) : null,
+          p_max_meal_amount: formData.max_meal_amount ? parseFloat(formData.max_meal_amount) : null,
+          p_allowed_expense_types: formData.allowed_expense_types,
+        } as any);
+        if (error) throw error;
+        alert('✅ Événement modifié avec succès');
       } else {
-        // Create new event
-        response = await fetch('/api/events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(eventData)
-        });
+        // Création via RPC create_event
+        const { error } = await supabase.rpc('create_event', {
+          p_name: formData.name,
+          p_description: formData.description,
+          p_event_type: formData.event_type,
+          p_start_date: formData.start_date,
+          p_end_date: formData.end_date,
+          p_location: formData.location,
+          p_departure_city: formData.departure_city || null,
+          p_custom_km_cap: parseFloat(formData.custom_km_cap),
+          p_carpooling_bonus_cap_percent: parseFloat(formData.carpooling_bonus_cap_percent),
+          p_allow_carpooling_bonus: formData.allow_carpooling_bonus,
+          p_max_train_amount: formData.max_train_amount ? parseFloat(formData.max_train_amount) : null,
+          p_max_hotel_per_night: formData.max_hotel_per_night ? parseFloat(formData.max_hotel_per_night) : null,
+          p_max_meal_amount: formData.max_meal_amount ? parseFloat(formData.max_meal_amount) : null,
+          p_allowed_expense_types: formData.allowed_expense_types,
+        } as any);
+        if (error) throw error;
+        alert('✅ Événement créé avec succès');
       }
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Erreur API');
-      alert(editingEvent ? '✅ Événement modifié avec succès' : '✅ Événement créé avec succès');
       resetForm();
       await loadEvents();
     } catch (error: any) {
