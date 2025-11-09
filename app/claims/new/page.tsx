@@ -77,24 +77,11 @@ export default function NewClaimPage() {
   const [passengerEmail, setPassengerEmail] = useState('');
   const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
   const [showArrivalSuggestions, setShowArrivalSuggestions] = useState(false);
-  const [citySuggestions, setCitySuggestions] = useState<any[]>([]);
+  const [departureSuggestions, setDepartureSuggestions] = useState<any[]>([]);
+  const [arrivalSuggestions, setArrivalSuggestions] = useState<any[]>([]);
   
   // Charger les tarifs depuis localStorage
   const [tarifs, setTarifs] = useState<any>({});
-  
-  // Fermer les suggestions quand on clique ailleurs
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.city-autocomplete-container')) {
-        setShowDepartureSuggestions(false);
-        setShowArrivalSuggestions(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
   
   useEffect(() => {
     loadUser();
@@ -181,15 +168,17 @@ export default function NewClaimPage() {
   
   function handleCitySearch(value: string, isDepart: boolean) {
     if (value.length >= 2) {
-      setCitySuggestions(searchCities(value));
+      const suggestions = searchCities(value);
       if (isDepart) {
+        setDepartureSuggestions(suggestions);
         setShowDepartureSuggestions(true);
       } else {
+        setArrivalSuggestions(suggestions);
         setShowArrivalSuggestions(true);
       }
     } else {
-      setShowDepartureSuggestions(false);
-      setShowArrivalSuggestions(false);
+      if (isDepart) setShowDepartureSuggestions(false);
+      else setShowArrivalSuggestions(false);
     }
   }
   
@@ -341,14 +330,16 @@ export default function NewClaimPage() {
       alert('Veuillez remplir le motif et ajouter au moins une dépense');
       return;
     }
-    
+    if (!user) {
+      alert('Vous devez être connecté pour créer une demande. Merci de vous reconnecter.');
+      return;
+    }
     setLoading(true);
     try {
       // Créer la demande via l'API (qui bypass RLS de manière sécurisée)
       // Pour l'instant, on prend la première dépense comme base (à améliorer)
       const firstExpense = expenses[0];
       const total = expenses.reduce((sum, e) => sum + e.amount, 0);
-      
       const claimData: any = {
         event_id: selectedEvent || null,
         expense_type: firstExpense.type,
@@ -363,22 +354,17 @@ export default function NewClaimPage() {
         distance_km: firstExpense.type === 'car' ? parseFloat(distance || '0') : null,
         cv_fiscaux: firstExpense.type === 'car' ? parseInt(fiscalPower) : null,
       };
-      
       const response = await fetch('/api/claims/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important: inclure les cookies de session
         body: JSON.stringify(claimData),
       });
-      
       const result = await response.json();
-      
       if (!response.ok) {
         throw new Error(result.error || 'Erreur lors de la création');
       }
-      
       const claim = result.claim;
-      
       // Upload des justificatifs
       for (const expense of expenses) {
         for (const file of expense.justificatifs) {
@@ -393,7 +379,6 @@ export default function NewClaimPage() {
           });
         }
       }
-      
       alert('✅ Demande créée avec succès !');
       router.push('/claims');
     } catch (error: any) {
@@ -514,11 +499,11 @@ export default function NewClaimPage() {
         
         {/* FRAIS KILOMÉTRIQUES */}
         {currentExpense.type === 'car' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 overflow-visible">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
             <h3 className="font-semibold mb-3 text-blue-900">🚗 Configuration du trajet</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div className="relative city-autocomplete-container">
+              <div className="relative">
                 <label className="block text-sm font-semibold mb-2">Départ *</label>
                 <input
                   type="text"
@@ -526,11 +511,10 @@ export default function NewClaimPage() {
                   onChange={(e) => { setDeparture(e.target.value); handleCitySearch(e.target.value, true); }}
                   placeholder="Ville de départ"
                   className="w-full px-4 py-2 border rounded-lg"
-                  autoComplete="off"
                 />
-                {showDepartureSuggestions && citySuggestions.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {citySuggestions.map((city, i) => (
+                {showDepartureSuggestions && departureSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                    {departureSuggestions.map((city, i) => (
                       <div
                         key={i}
                         onClick={() => { 
@@ -550,7 +534,7 @@ export default function NewClaimPage() {
                 )}
               </div>
               
-              <div className="relative city-autocomplete-container">
+              <div className="relative">
                 <label className="block text-sm font-semibold mb-2">Arrivée *</label>
                 <input
                   type="text"
@@ -558,11 +542,10 @@ export default function NewClaimPage() {
                   onChange={(e) => { setArrival(e.target.value); handleCitySearch(e.target.value, false); }}
                   placeholder="Ville d'arrivée"
                   className="w-full px-4 py-2 border rounded-lg"
-                  autoComplete="off"
                 />
-                {showArrivalSuggestions && citySuggestions.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {citySuggestions.map((city, i) => (
+                {showArrivalSuggestions && arrivalSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                    {arrivalSuggestions.map((city, i) => (
                       <div
                         key={i}
                         onClick={() => { 

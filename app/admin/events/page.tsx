@@ -625,7 +625,7 @@ export default function AdminEventsPage() {
                     <tr key={`${row.from}-${idx}`} className="border-b">
                       <td className="px-2 py-1">{row.from}</td>
                       <td className="px-2 py-1">{row.to}</td>
-                      <td className="px-2 py-1">{row.price !== null ? `${row.price} €` : 'N/A'}</td>
+                      <td className="px-2 py-1">{row.price !== null && row.price >= 0.01 ? `${row.price} €` : 'N/A'}</td>
                     </tr>
                   ))}
                 </tbody>
