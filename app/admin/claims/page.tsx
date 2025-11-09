@@ -16,9 +16,10 @@ export default function AdminClaimsPage() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState('car');
 
+
   useEffect(() => {
     checkAdmin();
-    loadBNMembers();
+    loadAllUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -46,20 +47,19 @@ export default function AdminClaimsPage() {
     }
   }
 
-  async function loadBNMembers() {
-    try {
-      // Fetch only BN members via RPC
-      const { data, error } = await supabase.rpc('get_bn_members');
 
+  async function loadAllUsers() {
+    try {
+      // Fetch all users for admin via RPC (like main claim page)
+      const { data, error } = await supabase.rpc('get_all_user_profiles');
       if (error) {
-        console.error('Error loading BN members:', error);
-        alert('Erreur lors du chargement des membres BN');
+        console.error('Erreur lors du chargement des utilisateurs:', error);
+        alert('Erreur lors du chargement des utilisateurs');
         return;
       }
-
       setUsers(data || []);
     } catch (error) {
-      console.error('Error in loadBNMembers:', error);
+      console.error('Erreur dans loadAllUsers:', error);
     }
   }
 
@@ -132,22 +132,22 @@ export default function AdminClaimsPage() {
       <div className="bg-white rounded-lg shadow-lg p-8">
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-semibold mb-2">Membre BN concerné *</label>
+            <label className="block text-sm font-semibold mb-2">Membre concerné *</label>
             <select
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
               className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">-- Sélectionnez un membre BN --</option>
+              <option value="">-- Sélectionnez un membre --</option>
               {users.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.full_name || `${user.first_name} ${user.last_name}`.trim() || user.email} ({user.email})
+                <option key={user.user_id || user.id || user.email} value={user.user_id || user.id || ''}>
+                  {user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || `${user.whitelist_first_name || ''} ${user.whitelist_last_name || ''}`.trim() || user.email.split('@')[0]} ({user.email})
                 </option>
               ))}
             </select>
             {users.length === 0 && (
               <p className="text-sm text-gray-500 mt-2">
-                Aucun membre BN trouvé. Vérifiez que des utilisateurs ont le rôle &apos;bn_member&apos;.
+                Aucun utilisateur trouvé. Vérifiez que des utilisateurs sont présents dans la base.
               </p>
             )}
           </div>
