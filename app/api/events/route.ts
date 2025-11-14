@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -10,20 +10,29 @@ export const dynamic = 'force-dynamic';
 // GET /api/events : liste tous les événements
 export async function GET() {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('events')
-      .select('*')
-      .order('start_date', { ascending: false });
-    
-    if (error) {
-      console.error('Erreur GET /api/events:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // Essayer via supabaseAdmin (bypass RLS)
+    try {
+      const { supabaseAdmin } = await import('@/lib/supabase-admin');
+      const { data, error } = await supabaseAdmin
+        .from('events')
+        .select('*')
+        .order('start_date', { ascending: false });
+      if (error) throw error;
+      return NextResponse.json(data);
+    } catch (e) {
+      console.warn('[GET /api/events] Admin client indisponible, fallback RLS:', (e as any)?.message);
+      // Fallback: utiliser le client lié aux cookies (RLS) – nécessite un user authentifié
+      const supabase = createRouteHandlerClient({ cookies });
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('start_date', { ascending: false });
+      if (error) throw error;
+      return NextResponse.json(data);
     }
-    
-    return NextResponse.json(data);
   } catch (error: any) {
     console.error('Erreur serveur GET /api/events:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Erreur serveur' }, { status: 500 });
   }
 }
 
@@ -31,27 +40,45 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
-    
-    // Vérifier l'authentification
+    // Récupérer session via cookies OU via Authorization: Bearer
+    let userId: string | null = null;
+    let role: string | null = null;
+
     const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    if (session?.user?.id) {
+      userId = session.user.id;
+    } else {
+      const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+      const token = authHeader?.toLowerCase().startsWith('bearer ')
+        ? authHeader.split(' ')[1]
+        : null;
+      if (token) {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+        const pub = createClient(supabaseUrl, supabaseAnon);
+        const { data: userResp } = await pub.auth.getUser(token);
+        userId = userResp.user?.id || null;
+      }
+    }
+    if (!userId) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
-    
+
     // Vérifier que l'utilisateur est admin
     const { data: userProfile } = await supabase
       .from('users')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .single();
-    
-    if (!userProfile || userProfile.role !== 'admin_asso') {
+    role = userProfile?.role || null;
+    if (!role || role !== 'admin_asso') {
       return NextResponse.json({ error: 'Accès non autorisé' }, { status: 403 });
     }
-    
+
     const body = await req.json();
     const { name, description, event_type, start_date, end_date, location, departure_city, custom_km_cap, carpooling_bonus_cap_percent, allow_carpooling_bonus, max_train_amount, max_hotel_per_night, max_meal_amount, allowed_expense_types } = body;
 
+    const { supabaseAdmin } = await import('@/lib/supabase-admin');
     const { data, error } = await supabaseAdmin
       .from('events')
       .insert([
@@ -70,7 +97,7 @@ export async function POST(req: NextRequest) {
           max_hotel_per_night,
           max_meal_amount,
           allowed_expense_types,
-          created_by: session.user.id,
+          created_by: userId,
         },
       ])
       .select();

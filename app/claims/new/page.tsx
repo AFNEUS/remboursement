@@ -153,14 +153,10 @@ export default function NewClaimPage() {
   
   async function loadEvents() {
     try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('start_date', { ascending: false })
-        .limit(20);
-      
-      if (error) throw error;
-      setEvents(data || []);
+      const response = await fetch('/api/events', { credentials: 'include' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setEvents(Array.isArray(data) ? data.slice(0, 20) : []);
     } catch (error) {
       console.error('Erreur chargement événements:', error);
     }
@@ -361,10 +357,16 @@ export default function NewClaimPage() {
       
       console.log('[Claims Submit] Données à envoyer:', claimData);
       
+      // Inclure le token d'auth dans l'en-tête pour fiabiliser l'auth côté serveur
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        authHeaders['Authorization'] = `Bearer ${session.access_token}`;
+      }
       const response = await fetch('/api/claims/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Important: inclure les cookies de session
+        headers: authHeaders,
+        credentials: 'include', // Inclure les cookies de session en plus du token
         body: JSON.stringify(claimData),
       });
       
@@ -813,9 +815,9 @@ export default function NewClaimPage() {
                   className="w-full px-4 py-2 border rounded-lg"
                   autoComplete="off"
                 />
-                {showDepartureSuggestions && citySuggestions.length > 0 && (
+                {showDepartureSuggestions && departureSuggestions.length > 0 && (
                   <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {citySuggestions.map((city, i) => (
+                    {departureSuggestions.map((city, i) => (
                       <div
                         key={i}
                         onClick={() => { 
@@ -841,9 +843,9 @@ export default function NewClaimPage() {
                   className="w-full px-4 py-2 border rounded-lg"
                   autoComplete="off"
                 />
-                {showArrivalSuggestions && citySuggestions.length > 0 && (
+                {showArrivalSuggestions && arrivalSuggestions.length > 0 && (
                   <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {citySuggestions.map((city, i) => (
+                    {arrivalSuggestions.map((city, i) => (
                       <div
                         key={i}
                         onClick={() => { 

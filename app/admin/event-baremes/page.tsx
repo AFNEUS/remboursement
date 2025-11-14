@@ -83,19 +83,20 @@ export default function EventBaremesPage() {
   }
 
   async function loadEvents() {
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .order('start_date', { ascending: false });
-
-    if (data) {
-      setEvents(data);
-      if (data.length > 0) {
+    try {
+      const res = await fetch('/api/events', { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEvents(data || []);
+      if (data && data.length > 0) {
         setSelectedEvent(data[0].id);
         loadBaremes(data[0].id);
       }
+    } catch (e) {
+      console.error('Erreur chargement événements:', e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function loadBaremes(eventId: string) {

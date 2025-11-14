@@ -19,10 +19,10 @@ export async function POST(request: NextRequest) {
     console.log('[API /api/claims/create] Nouvelle requête reçue');
     
     // Vérifier l'authentification
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
     
     console.log('[API /api/claims/create] Session:', session ? 'Présente' : 'Absente');
     console.log('[API /api/claims/create] Auth error:', authError);
+    import { createClient } from '@supabase/supabase-js';
     
     if (authError || !session) {
       console.error('[API /api/claims/create] Authentification échouée');
