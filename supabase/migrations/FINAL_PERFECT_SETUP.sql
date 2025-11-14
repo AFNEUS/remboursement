@@ -1640,6 +1640,20 @@ CREATE POLICY claims_select_staff ON public.expense_claims
     FOR SELECT
     USING (public.is_staff());
 
+-- Utilisateur peut créer ses propres demandes
+-- Staff/admin peut créer des demandes pour n'importe quel utilisateur
+CREATE POLICY claims_insert_staff ON public.expense_claims
+    FOR INSERT
+    WITH CHECK (public.is_staff());
+CREATE POLICY claims_insert_own ON public.expense_claims
+    FOR INSERT
+    WITH CHECK (user_id = auth.uid());
+
+-- Utilisateur peut modifier ses propres demandes (ex: brouillon)
+CREATE POLICY claims_update_own ON public.expense_claims
+    FOR UPDATE
+    USING (user_id = auth.uid());
+
 -- INSERT/UPDATE/DELETE via API uniquement (avec supabaseAdmin)
 -- Pas de policy INSERT/UPDATE/DELETE pour utilisateurs normaux
 -- → Force l'utilisation de l'API backend qui vérifie les droits
@@ -1655,15 +1669,25 @@ CREATE POLICY claims_staff_all ON public.expense_claims
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS events_select_all ON public.events;
-DROP POLICY IF EXISTS events_staff_all ON public.events;
+DROP POLICY IF EXISTS events_staff_update ON public.events;
+DROP POLICY IF EXISTS events_staff_delete ON public.events;
+DROP POLICY IF EXISTS events_staff_insert ON public.events;
 
 CREATE POLICY events_select_all ON public.events
     FOR SELECT
     USING (auth.uid() IS NOT NULL);
 
-CREATE POLICY events_staff_all ON public.events
-    FOR ALL
+CREATE POLICY events_staff_update ON public.events
+    FOR UPDATE
     USING (public.is_staff());
+
+CREATE POLICY events_staff_delete ON public.events
+    FOR DELETE
+    USING (public.is_staff());
+
+CREATE POLICY events_staff_insert ON public.events
+    FOR INSERT
+    WITH CHECK (public.is_staff());
 
 -- ---------------------------------------------------------------------
 -- RLS: event_baremes (lecture tous, écriture staff)

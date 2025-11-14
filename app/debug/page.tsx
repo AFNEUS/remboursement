@@ -148,7 +148,7 @@ export default function DebugPage() {
       <div className="mt-8 bg-yellow-50 border border-yellow-200 p-4 rounded">
         <h3 className="font-bold mb-2">📋 Instructions</h3>
         <ol className="list-decimal list-inside space-y-1 text-sm">
-          <li>Cliquez sur "Lancer les tests"</li>
+          <li>Cliquez sur &quot;Lancer les tests&quot;</li>
           <li>Attendez que tous les tests se terminent</li>
           <li>Copiez TOUS les résultats et envoyez-les moi</li>
           <li>Ouvrez aussi la console (F12) et envoyez les erreurs rouges</li>
