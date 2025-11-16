@@ -1,54 +1,28 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import { searchCities, calculateDistance } from '@/lib/cities-france';
+import { searchCities, calculateDistance, getEstimatedTrainPrice } from '@/lib/cities-france';
 import { calculateKilometricAmount, formatAmount } from '@/lib/calculations';
-import TrainJourneyForm from '@/components/TrainJourneyForm';
 
 type ExpenseType = 'car' | 'train' | 'transport' | 'meal' | 'hotel' | 'registration' | 'other';
 
-interface Passenger {
-  name: string;
-  email: string;
-}
-
-interface ExpenseItem {
-  id: string;
-  type: ExpenseType;
-  description: string;
+interface EstimatedRefund {
   amount: number;
-  theoreticalMax: number;
-  date: string;
-  justificatifs: File[];
-  departure?: string;
-  arrival?: string;
-  isRoundTrip?: boolean;
-  passengers?: Passenger[];
-  fuelReceipt?: File;
-  tollReceipt?: File;
+  percentage: number;
+  maxApplied: number | null;
+  description: string;
 }
 
 const EXPENSE_TYPES = [
-  { value: 'car', label: '🚗 Frais kilométriques', needsJustif: true },
-  { value: 'train', label: '🚄 Train', needsJustif: true },
-  { value: 'transport', label: '🚌 Bus/Transport', needsJustif: true },
-  { value: 'meal', label: '🍽️ Repas', needsJustif: false },
-  { value: 'hotel', label: '🏨 Hôtel', needsJustif: true },
-  { value: 'registration', label: '📝 Inscription', needsJustif: true },
-  { value: 'other', label: '📄 Autre', needsJustif: true },
-];
-
-const EVENT_TYPES = [
-  { value: 'CONGRES_ANNUEL', label: '🎓 Congrès annuel AFNEUS' },
-  { value: 'WEEKEND_PASSATION', label: '🔄 Week-end de passation' },
-  { value: 'FORMATION', label: '📚 Formation' },
-  { value: 'REUNION_BN', label: '🏛️ Réunion Bureau National' },
-  { value: 'REUNION_REGION', label: '🗺️ Réunion régionale' },
-  { value: 'EVENEMENT_EXTERNE', label: '🤝 Événement externe' },
-  { value: 'AUTRE', label: '📌 Autre' },
+  { value: 'car', label: 'Voiture (frais km)', icon: '🚗', needsJustif: true, needsDistance: true },
+  { value: 'train', label: 'Train', icon: '🚄', needsJustif: true, needsDistance: true },
+  { value: 'transport', label: 'Bus / Metro', icon: '🚌', needsJustif: true, needsDistance: false },
+  { value: 'meal', label: 'Repas', icon: '🍽️', needsJustif: false, needsDistance: false },
+  { value: 'hotel', label: 'Hotel', icon: '🏨', needsJustif: true, needsDistance: false },
+  { value: 'registration', label: 'Inscription', icon: '📝', needsJustif: true, needsDistance: false },
+  { value: 'other', label: 'Autre', icon: '📄', needsJustif: true, needsDistance: false },
 ];
 
 export default function NewClaimPage() {
@@ -56,112 +30,75 @@ export default function NewClaimPage() {
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string>('');
-  const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [selectedBnMember, setSelectedBnMember] = useState<string>('');
-  const [motive, setMotive] = useState('');
   const [events, setEvents] = useState<any[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<string>('');
-  const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
-  const [currentExpense, setCurrentExpense] = useState<Partial<ExpenseItem>>({
-    type: 'car' as any,
-    date: new Date().toISOString().split('T')[0],
-    passengers: [],
-  });
-  
+
+  // Form fields
+  const [expenseType, setExpenseType] = useState<ExpenseType>('train');
+  const [motive, setMotive] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState('');
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [description, setDescription] = useState('');
+  const [amountTTC, setAmountTTC] = useState<number | ''>('');
+
+  // Transport fields
   const [departure, setDeparture] = useState('');
   const [arrival, setArrival] = useState('');
-  const [distance, setDistance] = useState('');
-  const [fiscalPower, setFiscalPower] = useState('5');
-  const [passengerName, setPassengerName] = useState('');
-  const [passengerEmail, setPassengerEmail] = useState('');
-  const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
-  const [showArrivalSuggestions, setShowArrivalSuggestions] = useState(false);
+  const [distance, setDistance] = useState<number | ''>('');
+  const [isRoundTrip, setIsRoundTrip] = useState(false);
+  const [fiscalPower, setFiscalPower] = useState(5);
+
+  // Autocomplete
   const [departureSuggestions, setDepartureSuggestions] = useState<any[]>([]);
   const [arrivalSuggestions, setArrivalSuggestions] = useState<any[]>([]);
-  
-  // Charger les tarifs depuis localStorage
-  const [tarifs, setTarifs] = useState<any>({});
-  
+  const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
+  const [showArrivalSuggestions, setShowArrivalSuggestions] = useState(false);
+
+  // Estimation
+  const [estimatedRefund, setEstimatedRefund] = useState<EstimatedRefund | null>(null);
+
+  // Files
+  const [justificatifs, setJustificatifs] = useState<File[]>([]);
+
   useEffect(() => {
     loadUser();
     loadEvents();
-    loadBaremes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  
+
+  // Auto-calculate when relevant fields change
   useEffect(() => {
-    if (userRole === 'admin_asso') {
-  loadAllUsers();
-    }
+    calculateEstimate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userRole]);
-  
-  function loadTarifs() {
-    const saved = localStorage.getItem('admin_tarifs');
-    if (saved) {
-      const tarifsArray = JSON.parse(saved);
-      const tarifsMap: any = {};
-      tarifsArray.forEach((t: any) => {
-        tarifsMap[t.category] = t;
-      });
-      setTarifs(tarifsMap);
-    }
-  }
-  
+  }, [expenseType, amountTTC, distance, isRoundTrip, fiscalPower, departure, arrival]);
+
   async function loadUser() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsed = JSON.parse(testUser);
-      setUser(parsed);
-      setUserRole(parsed.role === 'ADMIN' ? 'admin_asso' : 'user');
-      setCheckingAuth(false);
-      return;
-    }
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push('/');
-      return;
-    }
-    
-    // Récupérer le rôle via RPC
-    const { data: userData } = await supabase.rpc('get_current_user_safe');
-    if (userData && Array.isArray(userData) && (userData as any[]).length > 0) {
-      const dbUser = (userData as any[])[0];
-      setUserRole(dbUser.role);
-    }
-    
-    setUser(user);
-    setCheckingAuth(false);
-  }
-  
-  async function loadAllUsers() {
     try {
-      const { data, error } = await supabase.rpc('get_all_user_profiles');
-      if (error) throw error;
-      setAllUsers((data as any[]) || []);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/auth/login');
+        return;
+      }
+      setUser(user);
     } catch (error) {
-      console.error('Erreur chargement utilisateurs:', error);
+      console.error('Error loading user:', error);
+      router.push('/auth/login');
+    } finally {
+      setCheckingAuth(false);
     }
   }
-  
-  function loadBaremes() {
-    // Charger les tarifs depuis localStorage pour calculs
-    loadTarifs();
-  }
-  
+
   async function loadEvents() {
     try {
       const response = await fetch('/api/events', { credentials: 'include' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      setEvents(Array.isArray(data) ? data.slice(0, 20) : []);
+      if (response.ok) {
+        const data = await response.json();
+        setEvents(Array.isArray(data) ? data : []);
+      }
     } catch (error) {
-      console.error('Erreur chargement événements:', error);
+      console.error('Error loading events:', error);
     }
   }
-  
+
   function handleCitySearch(value: string, isDepart: boolean) {
     if (value.length >= 2) {
       const suggestions = searchCities(value);
@@ -177,919 +114,520 @@ export default function NewClaimPage() {
       else setShowArrivalSuggestions(false);
     }
   }
-  
-  // Calcul automatique pour frais kilométriques
-  useEffect(() => {
-    if (currentExpense.type === 'car' && distance && departure && arrival) {
-      const km = parseFloat(distance);
-      const power = parseInt(fiscalPower);
-      const nbPassengers = (currentExpense.passengers?.length || 0) + 1; // +1 pour le conducteur
-      
-      if (km > 0) {
-        const baseAmount = calculateKilometricAmount(km, power);
-        const amount = currentExpense.isRoundTrip ? baseAmount * 2 : baseAmount;
-        const amountPerPerson = amount / nbPassengers;
-        const trip = currentExpense.isRoundTrip ? 'A/R' : 'Aller';
-        const covoiturage = nbPassengers > 1 ? ` (${nbPassengers} pers.)` : '';
-        
-        setCurrentExpense(prev => ({
-          ...prev,
-          description: `${departure} → ${arrival} (${trip}, ${km}km, ${power}CV${covoiturage})`,
-          amount: parseFloat(amountPerPerson.toFixed(2)),
-          theoreticalMax: parseFloat(amount.toFixed(2)),
-        }));
+
+  function selectCity(cityName: string, isDepart: boolean) {
+    if (isDepart) {
+      setDeparture(cityName);
+      setShowDepartureSuggestions(false);
+      if (arrival) {
+        const dist = calculateDistance(cityName, arrival);
+        setDistance(dist);
+      }
+    } else {
+      setArrival(cityName);
+      setShowArrivalSuggestions(false);
+      if (departure) {
+        const dist = calculateDistance(departure, cityName);
+        setDistance(dist);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distance, fiscalPower, departure, arrival]);
-  
-  // Recalcul quand on ajoute/retire des passagers
-  useEffect(() => {
-    if (currentExpense.type === 'car' && currentExpense.theoreticalMax) {
-      const nbPassengers = (currentExpense.passengers?.length || 0) + 1;
-      const amountPerPerson = currentExpense.theoreticalMax / nbPassengers;
-      setCurrentExpense(prev => ({
-        ...prev,
-        amount: parseFloat(amountPerPerson.toFixed(2)),
-      }));
-    }
-  }, [currentExpense.passengers, currentExpense.theoreticalMax, currentExpense.type]);
-  
-  function addPassenger() {
-    if (!passengerName || !passengerEmail) {
-      alert('Veuillez remplir le nom et l\'email du passager');
-      return;
-    }
-    
-    setCurrentExpense(prev => ({
-      ...prev,
-      passengers: [...(prev.passengers || []), { name: passengerName, email: passengerEmail }],
-    }));
-    
-    setPassengerName('');
-    setPassengerEmail('');
   }
-  
-  function removePassenger(index: number) {
-    setCurrentExpense(prev => ({
-      ...prev,
-      passengers: prev.passengers?.filter((_, i) => i !== index) || [],
-    }));
+
+  function calculateEstimate() {
+    if (expenseType === 'car' && distance && typeof distance === 'number') {
+      // Frais kilométriques
+      let totalKm = distance;
+      if (isRoundTrip) totalKm *= 2;
+
+      const amount = calculateKilometricAmount(totalKm, fiscalPower);
+      setEstimatedRefund({
+        amount,
+        percentage: 100,
+        maxApplied: null,
+        description: `${totalKm} km x ${fiscalPower} CV (barème fiscal 2024)`,
+      });
+      setAmountTTC(amount);
+      setDescription(`${departure} → ${arrival} (${isRoundTrip ? 'A/R' : 'Aller'}, ${totalKm}km, ${fiscalPower}CV)`);
+    } else if (expenseType === 'train' && distance && amountTTC && typeof distance === 'number' && typeof amountTTC === 'number') {
+      // Estimation train basée sur distance
+      const trainRefund = estimateTrainRefund(distance, amountTTC);
+      setEstimatedRefund(trainRefund);
+      if (!description) {
+        setDescription(`Train ${departure} → ${arrival} (${isRoundTrip ? 'A/R' : 'Aller'})`);
+      }
+    } else if (amountTTC && typeof amountTTC === 'number') {
+      // Autres types - estimation simple (65% pour BN)
+      setEstimatedRefund({
+        amount: amountTTC * 0.65,
+        percentage: 65,
+        maxApplied: null,
+        description: 'Estimation basée sur taux membre BN (65%)',
+      });
+    } else {
+      setEstimatedRefund(null);
+    }
   }
-  
+
+  function estimateTrainRefund(distanceKm: number, ticketPrice: number): EstimatedRefund {
+    // Barèmes intelligents basés sur distance
+    const baremes = [
+      { min: 0, max: 150, pct: 100, maxAmt: 50, desc: 'Courte distance (<150km) - 100% max 50€' },
+      { min: 150, max: 350, pct: 100, maxAmt: 80, desc: 'Moyenne distance (150-350km) - 100% max 80€' },
+      { min: 350, max: 550, pct: 95, maxAmt: 120, desc: 'Longue distance (350-550km) - 95% max 120€' },
+      { min: 550, max: 800, pct: 90, maxAmt: 160, desc: 'Très longue distance (550-800km) - 90% max 160€' },
+      { min: 800, max: 1200, pct: 85, maxAmt: 200, desc: 'Extra-longue distance - 85% max 200€' },
+      { min: 1200, max: 10000, pct: 80, maxAmt: 250, desc: 'DOM-TOM/Très loin - 80% max 250€' },
+    ];
+
+    const bareme = baremes.find(b => distanceKm >= b.min && distanceKm < b.max) || baremes[baremes.length - 1];
+    const calculated = ticketPrice * (bareme.pct / 100);
+    const refund = Math.min(calculated, bareme.maxAmt);
+
+    return {
+      amount: Math.round(refund * 100) / 100,
+      percentage: bareme.pct,
+      maxApplied: bareme.maxAmt,
+      description: bareme.desc,
+    };
+  }
+
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
-    setCurrentExpense(prev => ({
-      ...prev,
-      justificatifs: [...(prev.justificatifs || []), ...files],
-    }));
+    setJustificatifs(prev => [...prev, ...files]);
   }
-  
-  function addExpense() {
-    if (!currentExpense.description || !currentExpense.amount) {
-      alert('Veuillez remplir tous les champs obligatoires');
+
+  function removeFile(index: number) {
+    setJustificatifs(prev => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!motive.trim()) {
+      alert('Veuillez indiquer le motif de la demande');
       return;
     }
-    
-    // Vérifications spécifiques
-    if (currentExpense.type === 'car' && (!currentExpense.fuelReceipt || !currentExpense.tollReceipt)) {
-      if (!confirm('⚠️ Il manque des justificatifs (essence ou péage). Continuer quand même ?')) {
+
+    if (!amountTTC || amountTTC <= 0) {
+      alert('Veuillez indiquer le montant');
+      return;
+    }
+
+    if ((expenseType === 'car' || expenseType === 'train') && (!departure || !arrival)) {
+      alert('Veuillez indiquer les villes de départ et d\'arrivée');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Session expirée. Veuillez vous reconnecter.');
+        router.push('/auth/login');
         return;
       }
-    }
-    
-    const theoreticalMax = getTheoreticalMax(currentExpense.type!);
-    const exceedsLimit = currentExpense.amount! > theoreticalMax;
-    
-    const newExpense: ExpenseItem = {
-      id: Date.now().toString(),
-      type: currentExpense.type as ExpenseType,
-      description: currentExpense.description,
-      amount: currentExpense.amount,
-      theoreticalMax,
-      date: currentExpense.date || new Date().toISOString().split('T')[0],
-      justificatifs: currentExpense.justificatifs || [],
-      departure: currentExpense.departure,
-      arrival: currentExpense.arrival,
-      isRoundTrip: currentExpense.isRoundTrip,
-      passengers: currentExpense.passengers,
-      fuelReceipt: currentExpense.fuelReceipt,
-      tollReceipt: currentExpense.tollReceipt,
-    };
-    
-    if (exceedsLimit) {
-      alert(`⚠️ Attention : le montant dépasse le plafond de ${formatAmount(theoreticalMax)}. Votre demande nécessitera une validation manuelle.`);
-    }
-    
-    setExpenses([...expenses, newExpense]);
-    
-    // Reset
-    setCurrentExpense({
-      type: 'car' as any,
-      date: new Date().toISOString().split('T')[0],
-      passengers: [],
-    });
-    setDeparture('');
-    setArrival('');
-    setDistance('');
-  }
-  
-  function getTheoreticalMax(type: string): number {
-    // Pour les frais kilométriques, le max est calculé dynamiquement
-    if (type === 'car' && currentExpense.theoreticalMax) {
-      return currentExpense.theoreticalMax;
-    }
-    
-    // Mapper les types minuscules vers les clés majuscules des tarifs
-    const tarifKey = {
-      'train': 'TRAIN',
-      'transport': 'BUS',
-      'meal': 'MEAL',
-      'hotel': 'HOTEL',
-      'registration': 'OTHER',
-      'other': 'OTHER'
-    }[type as string];
-    
-    if (tarifKey && tarifs[tarifKey]) {
-      return tarifs[tarifKey].max_amount || 999;
-    }
-    
-    return 999; // Pas de plafond défini
-  }
-  
-  function removeExpense(id: string) {
-    setExpenses(expenses.filter(e => e.id !== id));
-  }
-  
-  async function handleSubmit() {
-    if (!motive || expenses.length === 0) {
-      alert('Veuillez remplir le motif et ajouter au moins une dépense');
-      return;
-    }
-    if (!user) {
-      alert('Vous devez être connecté pour créer une demande. Merci de vous reconnecter.');
-      return;
-    }
-    
-    console.log('[Claims Submit] Début de la soumission');
-    console.log('[Claims Submit] User:', user);
-    
-    setLoading(true);
-    try {
-      // Créer la demande via l'API (qui bypass RLS de manière sécurisée)
-      // Pour l'instant, on prend la première dépense comme base (à améliorer)
-      const firstExpense = expenses[0];
-      const total = expenses.reduce((sum, e) => sum + e.amount, 0);
-      const claimData: any = {
+
+      const claimData = {
         event_id: selectedEvent || null,
-        expense_type: firstExpense.type,
-        expense_date: firstExpense.date,
+        expense_type: expenseType,
+        expense_date: expenseDate,
         motive: motive,
-        description: expenses.map(e => e.description).join(' | '),
+        description: description || `${EXPENSE_TYPES.find(t => t.value === expenseType)?.label} - ${motive}`,
         merchant_name: '',
-        amount_ttc: total,
+        amount_ttc: amountTTC,
         currency: 'EUR',
-        departure_location: firstExpense.departure || null,
-        arrival_location: firstExpense.arrival || null,
-        distance_km: firstExpense.type === 'car' ? parseFloat(distance || '0') : null,
-        cv_fiscaux: firstExpense.type === 'car' ? parseInt(fiscalPower) : null,
+        departure_location: departure || null,
+        arrival_location: arrival || null,
+        distance_km: (expenseType === 'car' || expenseType === 'train') && distance
+          ? (isRoundTrip && expenseType === 'train' ? (distance as number) * 2 : distance)
+          : null,
+        cv_fiscaux: expenseType === 'car' ? fiscalPower : null,
       };
-      
-      console.log('[Claims Submit] Données à envoyer:', claimData);
-      
-      // Inclure le token d'auth dans l'en-tête pour fiabiliser l'auth côté serveur
-      const { data: { session } } = await supabase.auth.getSession();
-      const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (session?.access_token) {
-        authHeaders['Authorization'] = `Bearer ${session.access_token}`;
-      }
+
       const response = await fetch('/api/claims/create', {
         method: 'POST',
-        headers: authHeaders,
-        credentials: 'include', // Inclure les cookies de session en plus du token
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        credentials: 'include',
         body: JSON.stringify(claimData),
       });
-      
-      console.log('[Claims Submit] Réponse HTTP:', response.status);
-      
+
       const result = await response.json();
-      
-      console.log('[Claims Submit] Résultat JSON:', result);
-      
+
       if (!response.ok) {
         throw new Error(result.error || 'Erreur lors de la création');
       }
+
       const claim = result.claim;
-      // Upload des justificatifs
-      for (const expense of expenses) {
-        for (const file of expense.justificatifs) {
+
+      // Upload justificatifs
+      if (justificatifs.length > 0) {
+        for (const file of justificatifs) {
           const path = `${claim.id}/${Date.now()}_${file.name}`;
-          await supabase.storage.from('justificatifs').upload(path, file);
-          await supabase.from('justificatifs').insert({
-            expense_claim_id: claim.id,
-            file_name: file.name,
-            file_path: path,
-            file_type: file.type,
-            file_size: file.size,
-          });
+          const { error: uploadError } = await supabase.storage
+            .from('justificatifs')
+            .upload(path, file);
+
+          if (!uploadError) {
+            // Cast to any to bypass TypeScript type issues with generated types
+            await (supabase.from('justificatifs') as any).insert({
+              expense_claim_id: claim.id,
+              file_name: file.name,
+              file_path: path,
+              file_type: file.type,
+              file_size: file.size,
+            });
+          }
         }
       }
-      alert('✅ Demande créée avec succès !');
+
+      alert(`Demande créée ! Remboursement estimé : ${formatAmount(result.calculation.reimbursableAmount)}`);
       router.push('/claims');
     } catch (error: any) {
-      console.error('[Claims Submit] Erreur:', error);
-      alert('❌ Erreur : ' + error.message);
+      console.error('Submit error:', error);
+      alert('Erreur : ' + error.message);
     } finally {
       setLoading(false);
     }
   }
 
-  // Déterminer les types de dépenses autorisés en fonction de l'événement sélectionné
-  const selectedEventObj = events.find(ev => ev.id === selectedEvent);
-  const allowedExpenseValues: string[] = (selectedEventObj && selectedEventObj.allowed_expense_types)
-    ? selectedEventObj.allowed_expense_types
-    : EXPENSE_TYPES.map(t => t.value);
-  
   if (checkingAuth) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="text-center py-12">
-          <div className="text-4xl mb-4">⏳</div>
-          <p className="text-gray-600">Vérification...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Chargement...</p>
         </div>
       </div>
     );
   }
-  
+
+  const selectedExpenseType = EXPENSE_TYPES.find(t => t.value === expenseType);
+
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <h1 className="text-3xl font-bold mb-4">📝 Nouvelle demande de remboursement</h1>
-      
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* ADMIN: Sélection membre BN */}
-          {userRole === 'admin_asso' && allUsers.length > 0 && (
-            <div className="md:col-span-2">
-              <label className="block text-sm font-semibold mb-2">
-                👤 Créer la demande au nom de (optionnel)
-              </label>
-              <select
-                value={selectedBnMember}
-                onChange={(e) => setSelectedBnMember(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-purple-50"
+    <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <div className="mb-6">
+        <button
+          onClick={() => router.back()}
+          className="text-blue-600 hover:text-blue-800 flex items-center gap-2"
+        >
+          ← Retour
+        </button>
+      </div>
+
+      <h1 className="text-3xl font-bold mb-6">Nouvelle demande de remboursement</h1>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Type de dépense - Style Cards */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <label className="block text-lg font-semibold mb-4">Type de dépense</label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {EXPENSE_TYPES.map(type => (
+              <button
+                key={type.value}
+                type="button"
+                onClick={() => setExpenseType(type.value as ExpenseType)}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  expenseType === type.value
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                }`}
               >
-                <option value="">📝 Ma propre demande (moi-même)</option>
-                {allUsers.map(user => (
-                  <option key={user.user_id || user.email} value={user.user_id || ''}>
-                    {user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || `${user.whitelist_first_name || ''} ${user.whitelist_last_name || ''}`.trim() || user.email.split('@')[0]} ({user.email})
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                💡 En tant qu&apos;admin, vous pouvez créer une demande pour un membre BN. Elle apparaîtra dans leur compte.
-              </p>
-            </div>
-          )}
-          
+                <div className="text-2xl mb-2">{type.icon}</div>
+                <div className="text-sm font-medium">{type.label}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Motif et événement */}
+        <div className="bg-white rounded-lg shadow p-6 space-y-4">
           <div>
-            <label className="block text-sm font-semibold mb-2">Motif de la demande *</label>
+            <label className="block font-semibold mb-2">Motif de la demande *</label>
             <input
               type="text"
               value={motive}
               onChange={(e) => setMotive(e.target.value)}
-              placeholder="Ex: Formation AFNEUS 2024, Déplacement réunion, etc."
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Ex: Formation AFNEUS 2024, Réunion BN Paris..."
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-semibold mb-2">Événement lié (optionnel)</label>
+            <label className="block font-semibold mb-2">Événement lié (optionnel)</label>
             <select
               value={selectedEvent}
               onChange={(e) => setSelectedEvent(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Aucun événement / Frais hors événement</option>
+              <option value="">Aucun événement</option>
               {events.map(event => (
                 <option key={event.id} value={event.id}>
-                  {event.name} ({new Date(event.start_date).toLocaleDateString('fr-FR')})
+                  {event.name} - {new Date(event.start_date).toLocaleDateString('fr-FR')}
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">
-              {selectedEvent ? '🎯 Les barèmes de l&apos;événement seront appliqués' : 'Les barèmes standards seront appliqués'}
-            </p>
           </div>
-        </div>
-      </div>
-      
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">➕ Ajouter une dépense</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
           <div>
-            <label className="block text-sm font-semibold mb-2">Type de dépense *</label>
-            <select
-              value={currentExpense.type}
-              onChange={(e) => setCurrentExpense({ ...currentExpense, type: e.target.value as ExpenseType })}
-              className="w-full px-4 py-2 border rounded-lg"
-            >
-              {EXPENSE_TYPES
-                .filter(type => allowedExpenseValues.includes(type.value))
-                .map(type => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-semibold mb-2">Date *</label>
+            <label className="block font-semibold mb-2">Date de la dépense *</label>
             <input
               type="date"
-              value={currentExpense.date}
-              onChange={(e) => setCurrentExpense({ ...currentExpense, date: e.target.value })}
-              className="w-full px-4 py-2 border rounded-lg"
+              value={expenseDate}
+              onChange={(e) => setExpenseDate(e.target.value)}
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              required
             />
           </div>
         </div>
-        
-        {/* FRAIS KILOMÉTRIQUES */}
-        {currentExpense.type === 'car' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold mb-3 text-blue-900">🚗 Configuration du trajet</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+        {/* Trajet (Voiture ou Train) */}
+        {selectedExpenseType?.needsDistance && (
+          <div className="bg-white rounded-lg shadow p-6 space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              {selectedExpenseType.icon} Configuration du trajet
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="relative">
-                <label className="block text-sm font-semibold mb-2">Départ *</label>
+                <label className="block font-medium mb-2">Ville de départ *</label>
                 <input
                   type="text"
                   value={departure}
-                  onChange={(e) => { setDeparture(e.target.value); handleCitySearch(e.target.value, true); }}
-                  placeholder="Ville de départ"
-                  className="w-full px-4 py-2 border rounded-lg"
+                  onChange={(e) => {
+                    setDeparture(e.target.value);
+                    handleCitySearch(e.target.value, true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowDepartureSuggestions(false), 200)}
+                  placeholder="Ex: Paris, Lyon, Marseille..."
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
                 {showDepartureSuggestions && departureSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                  <div className="absolute z-20 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                     {departureSuggestions.map((city, i) => (
                       <div
                         key={i}
-                        onClick={() => { 
-                          setDeparture(city.name); 
-                          setShowDepartureSuggestions(false);
-                          if (arrival) {
-                            const dist = calculateDistance(city.name, arrival);
-                            setDistance(dist.toString());
-                          }
-                        }}
-                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                        onMouseDown={() => selectCity(city.name, true)}
+                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b"
                       >
-                        {city.name} ({city.code})
+                        <div className="font-medium">{city.name}</div>
+                        <div className="text-xs text-gray-500">{city.code} - {city.region}</div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              
+
               <div className="relative">
-                <label className="block text-sm font-semibold mb-2">Arrivée *</label>
+                <label className="block font-medium mb-2">Ville d&apos;arrivée *</label>
                 <input
                   type="text"
                   value={arrival}
-                  onChange={(e) => { setArrival(e.target.value); handleCitySearch(e.target.value, false); }}
-                  placeholder="Ville d'arrivée"
-                  className="w-full px-4 py-2 border rounded-lg"
+                  onChange={(e) => {
+                    setArrival(e.target.value);
+                    handleCitySearch(e.target.value, false);
+                  }}
+                  onBlur={() => setTimeout(() => setShowArrivalSuggestions(false), 200)}
+                  placeholder="Ex: Paris, Lyon, Marseille..."
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
                 {showArrivalSuggestions && arrivalSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                  <div className="absolute z-20 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                     {arrivalSuggestions.map((city, i) => (
                       <div
                         key={i}
-                        onClick={() => { 
-                          setArrival(city.name); 
-                          setShowArrivalSuggestions(false);
-                          if (departure) {
-                            const dist = calculateDistance(departure, city.name);
-                            setDistance(dist.toString());
-                          }
-                        }}
-                        className="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                        onMouseDown={() => selectCity(city.name, false)}
+                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b"
                       >
-                        {city.name} ({city.code})
+                        <div className="font-medium">{city.name}</div>
+                        <div className="text-xs text-gray-500">{city.code} - {city.region}</div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-semibold mb-2">Distance (km) *</label>
+                <label className="block font-medium mb-2">Distance (km)</label>
                 <input
                   type="number"
                   value={distance}
-                  onChange={(e) => setDistance(e.target.value)}
-                  placeholder="Ex: 150"
-                  className="w-full px-4 py-2 border rounded-lg"
+                  onChange={(e) => setDistance(e.target.value ? parseFloat(e.target.value) : '')}
+                  placeholder="Auto-calculé"
+                  className="w-full px-4 py-3 border rounded-lg bg-gray-50"
                 />
-                {distance && departure && arrival && (
-                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
-                    <p className="text-xs text-yellow-800">
-                      ℹ️ <strong>Distance approximative</strong> calculée automatiquement. 
-                      Vous pouvez la modifier si nécessaire.
-                    </p>
-                  </div>
+                {distance && (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ Distance calculée automatiquement (coeff. routier 1.3x)
+                  </p>
                 )}
               </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-2">Puissance fiscale *</label>
-                <select
-                  value={fiscalPower}
-                  onChange={(e) => setFiscalPower(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg"
-                >
-                  <option value="3">3 CV</option>
-                  <option value="4">4 CV</option>
-                  <option value="5">5 CV</option>
-                  <option value="6">6 CV</option>
-                  <option value="7">7 CV</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-2">Type de trajet</label>
-                <label className="flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer hover:bg-blue-50">
+
+              {expenseType === 'car' && (
+                <div>
+                  <label className="block font-medium mb-2">Puissance fiscale</label>
+                  <select
+                    value={fiscalPower}
+                    onChange={(e) => setFiscalPower(parseInt(e.target.value))}
+                    className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={3}>3 CV - 0.529 €/km</option>
+                    <option value={4}>4 CV - 0.606 €/km</option>
+                    <option value={5}>5 CV - 0.636 €/km</option>
+                    <option value={6}>6 CV - 0.665 €/km</option>
+                    <option value={7}>7 CV+ - 0.697 €/km</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-end">
+                <label className="flex items-center gap-3 px-4 py-3 border rounded-lg cursor-pointer hover:bg-gray-50 w-full">
                   <input
                     type="checkbox"
-                    checked={currentExpense.isRoundTrip}
-                    onChange={(e) => setCurrentExpense({ ...currentExpense, isRoundTrip: e.target.checked })}
-                    className="w-4 h-4"
+                    checked={isRoundTrip}
+                    onChange={(e) => setIsRoundTrip(e.target.checked)}
+                    className="w-5 h-5 rounded"
                   />
-                  <span>Aller-retour</span>
+                  <span className="font-medium">Aller-retour</span>
                 </label>
               </div>
             </div>
-            
-            {/* Covoiturage */}
-            <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
-              <h4 className="font-semibold mb-2">👥 Covoiturage (optionnel)</h4>
-              <p className="text-sm text-gray-600 mb-3">
-                Si d&apos;autres membres étaient dans votre véhicule, ajoutez-les. Le montant sera divisé équitablement.
+          </div>
+        )}
+
+        {/* Montant */}
+        <div className="bg-white rounded-lg shadow p-6 space-y-4">
+          <div>
+            <label className="block font-semibold mb-2">
+              {expenseType === 'car' ? 'Montant calculé (€)' : 'Montant TTC (€) *'}
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={amountTTC}
+              onChange={(e) => setAmountTTC(e.target.value ? parseFloat(e.target.value) : '')}
+              placeholder={expenseType === 'car' ? 'Calculé automatiquement' : 'Prix réel payé'}
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 text-lg ${
+                expenseType === 'car' ? 'bg-gray-50' : ''
+              }`}
+              required={expenseType !== 'car'}
+              readOnly={expenseType === 'car'}
+            />
+            {expenseType === 'train' && (
+              <p className="text-sm text-gray-600 mt-2">
+                Indiquez le prix total payé pour votre billet SNCF
               </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-                <input
-                  type="text"
-                  value={passengerName}
-                  onChange={(e) => setPassengerName(e.target.value)}
-                  placeholder="Nom du passager"
-                  className="px-3 py-2 border rounded-lg text-sm"
-                />
-                <input
-                  type="email"
-                  value={passengerEmail}
-                  onChange={(e) => setPassengerEmail(e.target.value)}
-                  placeholder="Email du passager"
-                  className="px-3 py-2 border rounded-lg text-sm"
-                />
-                <button
-                  onClick={addPassenger}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                >
-                  ➕ Ajouter
-                </button>
-              </div>
-              
-              {currentExpense.passengers && currentExpense.passengers.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {currentExpense.passengers.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded text-sm">
-                      <span>{p.name} ({p.email})</span>
-                      <button
-                        onClick={() => removePassenger(i)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            {/* Justificatifs obligatoires */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <h4 className="font-semibold mb-2 text-yellow-900">📎 Justificatifs obligatoires</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Reçu essence/carburant *</label>
-                  <input
-                    type="file"
-                    onChange={(e) => setCurrentExpense({ ...currentExpense, fuelReceipt: e.target.files?.[0] })}
-                    className="w-full text-sm"
-                    accept="image/*,.pdf"
-                  />
-                  {currentExpense.fuelReceipt && (
-                    <p className="text-xs text-green-600 mt-1">✓ {currentExpense.fuelReceipt.name}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Reçu péage (si applicable) *</label>
-                  <input
-                    type="file"
-                    onChange={(e) => setCurrentExpense({ ...currentExpense, tollReceipt: e.target.files?.[0] })}
-                    className="w-full text-sm"
-                    accept="image/*,.pdf"
-                  />
-                  {currentExpense.tollReceipt && (
-                    <p className="text-xs text-green-600 mt-1">✓ {currentExpense.tollReceipt.name}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            {currentExpense.amount && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold">💰 Montant calculé :</span>
-                  <span className="text-2xl font-bold text-green-700">{formatAmount(currentExpense.amount)}</span>
-                </div>
-                {currentExpense.theoreticalMax && currentExpense.passengers && currentExpense.passengers.length > 0 && (
-                  <div className="text-sm text-gray-600 mt-2">
-                    Montant total : {formatAmount(currentExpense.theoreticalMax)} ÷ {currentExpense.passengers.length + 1} personnes
-                  </div>
-                )}
-              </div>
             )}
           </div>
-        )}
-        
-        {/* TRAIN */}
-        {currentExpense.type === 'train' && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold mb-3 text-purple-900">🚄 Informations du trajet train</h3>
-            
-            <TrainJourneyForm
-              initialDate={currentExpense.date}
-              onJourneyChange={(segments, isRoundTrip) => {
-                // Calculer le montant total et construire la description
-                const totalPrice = segments.reduce((sum, seg) => sum + (seg.price || 0), 0);
-                const description = segments.map((seg, i) => 
-                  `${seg.from} → ${seg.to} (${seg.date})`
-                ).join(' | ');
-                
-                setCurrentExpense({
-                  ...currentExpense,
-                  departure: segments[0]?.from || '',
-                  arrival: segments[segments.length - 1]?.to || '',
-                  isRoundTrip,
-                  amount: totalPrice || currentExpense.amount,
-                  description: description || `Train ${segments[0]?.from} → ${segments[segments.length - 1]?.to}`,
-                  // Stocker les segments pour envoi ultérieur
-                  trainSegments: segments,
-                });
-              }}
+
+          {/* Estimation du remboursement */}
+          {estimatedRefund && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-semibold text-green-800">Remboursement estimé</span>
+                <span className="text-2xl font-bold text-green-700">
+                  {formatAmount(estimatedRefund.amount)}
+                </span>
+              </div>
+              <p className="text-sm text-green-700">{estimatedRefund.description}</p>
+              {estimatedRefund.maxApplied && (
+                <p className="text-xs text-green-600 mt-1">
+                  Plafond appliqué : {formatAmount(estimatedRefund.maxApplied)}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block font-medium mb-2">Description (optionnel)</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Détails supplémentaires..."
+              rows={2}
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
-            
-            <div className="mt-4">
-              <label className="block text-sm font-semibold mb-2">Montant total (€) *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={currentExpense.amount || ''}
-                onChange={(e) => {
-                  const amount = parseFloat(e.target.value);
-                  const maxTrain = tarifs['TRAIN']?.max_amount || 150;
-                  setCurrentExpense({ 
-                    ...currentExpense, 
-                    amount,
-                  });
-                  if (amount > maxTrain) {
-                    alert(`⚠️ Le montant dépasse le plafond de ${formatAmount(maxTrain)}`);
-                  }
-                }}
-                placeholder="Prix total des billets"
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-              {tarifs['TRAIN'] && (
-                <p className="text-sm text-gray-600 mt-1">
-                  Plafond : {formatAmount(tarifs['TRAIN'].max_amount)}
-                </p>
-              )}
-            </div>
-            
-            <div className="mt-4">
-              <label className="block text-sm font-semibold mb-2">Billets de train (PDF ou photos) *</label>
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                multiple
-                className="w-full"
-                accept="image/*,.pdf"
-              />
-              {currentExpense.justificatifs && currentExpense.justificatifs.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {currentExpense.justificatifs.map((file, i) => (
-                    <p key={i} className="text-xs text-green-600">✓ {file.name}</p>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
-        )}
-        
-        {/* BUS */}
-        {currentExpense.type === 'transport' && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4 overflow-visible">
-            <h3 className="font-semibold mb-3 text-orange-900">🚌 Informations du trajet</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div className="relative city-autocomplete-container">
-                <label className="block text-sm font-semibold mb-2">Départ *</label>
-                <input
-                  type="text"
-                  value={departure}
-                  onChange={(e) => { setDeparture(e.target.value); handleCitySearch(e.target.value, true); }}
-                  placeholder="Lieu de départ"
-                  className="w-full px-4 py-2 border rounded-lg"
-                  autoComplete="off"
-                />
-                {showDepartureSuggestions && departureSuggestions.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {departureSuggestions.map((city, i) => (
-                      <div
-                        key={i}
-                        onClick={() => { 
-                          setDeparture(city.name); 
-                          setShowDepartureSuggestions(false);
-                        }}
-                        className="px-4 py-2 hover:bg-orange-50 cursor-pointer"
-                      >
-                        {city.name} ({city.code})
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              <div className="relative city-autocomplete-container">
-                <label className="block text-sm font-semibold mb-2">Arrivée *</label>
-                <input
-                  type="text"
-                  value={arrival}
-                  onChange={(e) => { setArrival(e.target.value); handleCitySearch(e.target.value, false); }}
-                  placeholder="Lieu d'arrivée"
-                  className="w-full px-4 py-2 border rounded-lg"
-                  autoComplete="off"
-                />
-                {showArrivalSuggestions && arrivalSuggestions.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {arrivalSuggestions.map((city, i) => (
-                      <div
-                        key={i}
-                        onClick={() => { 
-                          setArrival(city.name); 
-                          setShowArrivalSuggestions(false);
-                        }}
-                        className="px-4 py-2 hover:bg-orange-50 cursor-pointer"
-                      >
-                        {city.name} ({city.code})
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Montant du billet *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={currentExpense.amount || ''}
-                onChange={(e) => {
-                  const amount = parseFloat(e.target.value);
-                  setCurrentExpense({ 
-                    ...currentExpense, 
-                    amount,
-                    description: `Bus ${departure} → ${arrival}`,
-                  });
-                }}
-                placeholder="Prix réel du billet"
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-              {tarifs['BUS'] && (
-                <p className="text-sm text-gray-600 mt-1">
-                  Plafond : {formatAmount(tarifs['BUS'].max_amount)}
-                </p>
-              )}
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold mb-2">Billet (PDF ou photo) *</label>
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                className="w-full"
-                accept="image/*,.pdf"
-              />
-            </div>
+        </div>
+
+        {/* Justificatifs */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <label className="block font-semibold mb-2">
+            Justificatifs {selectedExpenseType?.needsJustif && '*'}
+          </label>
+          <p className="text-sm text-gray-600 mb-4">
+            {expenseType === 'car' && 'Facture essence, ticket péage, carte grise...'}
+            {expenseType === 'train' && 'Billet SNCF (PDF ou photo)'}
+            {expenseType === 'hotel' && 'Facture hôtel'}
+            {expenseType === 'meal' && 'Ticket de caisse (optionnel pour les repas)'}
+            {!['car', 'train', 'hotel', 'meal'].includes(expenseType) && 'Facture ou reçu'}
+          </p>
+
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+            <input
+              type="file"
+              onChange={handleFileUpload}
+              multiple
+              accept="image/*,.pdf"
+              className="hidden"
+              id="file-upload"
+            />
+            <label htmlFor="file-upload" className="cursor-pointer">
+              <div className="text-4xl mb-2">📎</div>
+              <div className="font-medium text-blue-600">Cliquez pour ajouter des fichiers</div>
+              <div className="text-sm text-gray-500">ou glissez-déposez vos justificatifs ici</div>
+            </label>
           </div>
-        )}
-        
-        {/* REPAS */}
-        {currentExpense.type === 'meal' && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold mb-3 text-yellow-900">🍽️ Frais de repas</h3>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Description *</label>
-              <input
-                type="text"
-                value={currentExpense.description || ''}
-                onChange={(e) => setCurrentExpense({ ...currentExpense, description: e.target.value })}
-                placeholder="Ex: Repas midi - Formation AFNEUS"
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Montant</label>
-              <input
-                type="number"
-                step="0.01"
-                value={currentExpense.amount || tarifs['MEAL']?.default_amount || 15}
-                onChange={(e) => setCurrentExpense({ ...currentExpense, amount: parseFloat(e.target.value) })}
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-              {tarifs['MEAL'] && (
-                <p className="text-sm text-gray-600 mt-1">
-                  Forfait : {formatAmount(tarifs['MEAL'].default_amount)} | Plafond : {formatAmount(tarifs['MEAL'].max_amount)}
-                </p>
-              )}
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold mb-2">Ticket de caisse (optionnel)</label>
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                className="w-full"
-                accept="image/*,.pdf"
-              />
-            </div>
-          </div>
-        )}
-        
-        {/* HOTEL */}
-        {currentExpense.type === 'hotel' && (
-          <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold mb-3 text-pink-900">🏨 Hébergement</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2">Nom de l&apos;hôtel *</label>
-                <input
-                  type="text"
-                  value={currentExpense.description || ''}
-                  onChange={(e) => setCurrentExpense({ ...currentExpense, description: e.target.value })}
-                  placeholder="Ex: Ibis Lyon Centre"
-                  className="w-full px-4 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold mb-2">Montant par nuit *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={currentExpense.amount || ''}
-                  onChange={(e) => setCurrentExpense({ ...currentExpense, amount: parseFloat(e.target.value) })}
-                  placeholder="Prix par nuit"
-                  className="w-full px-4 py-2 border rounded-lg"
-                />
-                {tarifs['HOTEL'] && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    Plafond : {formatAmount(tarifs['HOTEL'].max_amount)}/nuit
-                  </p>
-                )}
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold mb-2">Facture de l&apos;hôtel *</label>
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                className="w-full"
-                accept="image/*,.pdf"
-              />
-            </div>
-          </div>
-        )}
-        
-        {/* AUTRE */}
-        {currentExpense.type === 'other' && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Description *</label>
-              <input
-                type="text"
-                value={currentExpense.description || ''}
-                onChange={(e) => setCurrentExpense({ ...currentExpense, description: e.target.value })}
-                placeholder="Décrivez la dépense"
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-2">Montant *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={currentExpense.amount || ''}
-                onChange={(e) => setCurrentExpense({ ...currentExpense, amount: parseFloat(e.target.value) })}
-                className="w-full px-4 py-2 border rounded-lg"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold mb-2">Justificatif *</label>
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                className="w-full"
-                accept="image/*,.pdf"
-              />
-            </div>
-          </div>
-        )}
-        
-        <button
-          onClick={addExpense}
-          className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-        >
-          ➕ Ajouter cette dépense
-        </button>
-      </div>
-      
-      {/* Liste des dépenses */}
-      {expenses.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">📋 Dépenses ajoutées ({expenses.length})</h2>
-          
-          <div className="space-y-3">
-            {expenses.map((expense) => (
-              <div key={expense.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold">
-                      {EXPENSE_TYPES.find(t => t.value === expense.type)?.label}
-                    </span>
-                    {expense.amount > expense.theoreticalMax && (
-                      <span className="text-xs px-2 py-1 bg-orange-100 text-orange-800 rounded">
-                        ⚠️ Hors plafond
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600">{expense.description}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {expense.date} | {expense.justificatifs.length} justificatif(s)
-                    {expense.passengers && expense.passengers.length > 0 && (
-                      <span> | {expense.passengers.length + 1} personnes</span>
-                    )}
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold">{formatAmount(expense.amount)}</span>
+
+          {justificatifs.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {justificatifs.map((file, i) => (
+                <div key={i} className="flex items-center justify-between bg-gray-50 p-3 rounded">
+                  <span className="text-sm truncate flex-1">📄 {file.name}</span>
                   <button
-                    onClick={() => removeExpense(expense.id)}
-                    className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                    type="button"
+                    onClick={() => removeFile(i)}
+                    className="text-red-600 hover:text-red-800 ml-2"
                   >
                     ✕
                   </button>
                 </div>
-              </div>
-            ))}
-          </div>
-          
-          <div className="mt-6 pt-4 border-t flex justify-between items-center">
-            <span className="text-lg font-semibold">Total de la demande :</span>
-            <span className="text-3xl font-bold text-blue-600">
-              {formatAmount(expenses.reduce((sum, e) => sum + e.amount, 0))}
-            </span>
-          </div>
-          
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Submit */}
+        <div className="flex gap-4">
           <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full mt-6 px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold text-lg"
+            type="button"
+            onClick={() => router.back()}
+            className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold"
           >
-            {loading ? '⏳ Envoi en cours...' : '✅ Soumettre la demande'}
+            Annuler
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Envoi...
+              </span>
+            ) : (
+              'Créer la demande'
+            )}
           </button>
         </div>
-      )}
+      </form>
     </div>
   );
 }

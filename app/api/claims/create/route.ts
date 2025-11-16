@@ -60,10 +60,11 @@ export async function POST(request: NextRequest) {
     // NOTE: On ne bloque plus si l'IBAN n'est pas vérifié - cela sera requis au moment du paiement
 
     // Récupérer les barèmes, taux et plafonds via admin client (bypass RLS)
-    const [baremes, taux, plafonds] = await Promise.all([
+    const [baremes, taux, plafonds, trainBaremesResult] = await Promise.all([
       supabaseAdmin.from('baremes').select('*').is('valid_to', null),
       supabaseAdmin.from('taux_remboursement').select('*').is('valid_to', null),
       supabaseAdmin.from('plafonds').select('*').is('valid_to', null),
+      supabaseAdmin.from('train_baremes').select('*').is('valid_to', null),
     ]);
 
     if (!baremes.data || !taux.data || !plafonds.data) {
@@ -74,14 +75,24 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ error: 'Erreur lors de la récupération des paramètres' }, { status: 500 });
     }
-    
+
+    // Convertir les barèmes train en format attendu
+    const trainBaremes = (trainBaremesResult.data || []).map((b: any) => ({
+      distance_min_km: b.distance_min_km,
+      distance_max_km: b.distance_max_km,
+      percentage_refund: b.percentage_refund,
+      max_amount_euros: b.max_amount_euros,
+      description: b.description,
+    }));
+
     // Calculer le montant remboursable
     const calculation = await calculateReimbursableAmount(
       body,
       userProfile.role,
       baremes.data,
       taux.data,
-      plafonds.data
+      plafonds.data,
+      trainBaremes.length > 0 ? trainBaremes : undefined
     );
     
     // Créer la demande (statut draft par défaut)
