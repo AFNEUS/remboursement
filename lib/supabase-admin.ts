@@ -82,7 +82,7 @@ export async function requireAdmin(userId: string) {
     .eq('id', userId)
     .single();
 
-  if (error || !user || (user as any).role !== 'ADMIN') {
+  if (error || !user || (user as any).role !== 'admin_asso') {
     throw new Error('Unauthorized: Admin access required');
   }
 

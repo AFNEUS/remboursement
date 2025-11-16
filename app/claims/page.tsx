@@ -56,19 +56,19 @@ export default function MyClaimsPage() {
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
       draft: 'bg-gray-200 text-gray-800',
-      to_validate: 'bg-yellow-200 text-yellow-800',
+      submitted: 'bg-yellow-200 text-yellow-800',
+      needs_info: 'bg-orange-200 text-orange-800',
       validated: 'bg-green-200 text-green-800',
-      refused: 'bg-red-200 text-red-800',
-      incomplete: 'bg-orange-200 text-orange-800',
+      rejected: 'bg-red-200 text-red-800',
       paid: 'bg-blue-200 text-blue-800',
     };
-    
+
     const labels: Record<string, string> = {
       draft: 'Brouillon',
-      to_validate: 'À valider',
+      submitted: 'En attente',
+      needs_info: 'Info requise',
       validated: 'Validée',
-      refused: 'Refusée',
-      incomplete: 'Incomplète',
+      rejected: 'Refusée',
       paid: 'Payée',
     };
 
@@ -93,17 +93,24 @@ export default function MyClaimsPage() {
 
       {/* Filtres */}
       <div className="flex gap-2 mb-6 overflow-x-auto">
-        {['all', 'draft', 'to_validate', 'validated', 'refused', 'paid'].map((status) => (
+        {[
+          { key: 'all', label: 'Toutes' },
+          { key: 'draft', label: 'Brouillons' },
+          { key: 'submitted', label: 'En attente' },
+          { key: 'validated', label: 'Validées' },
+          { key: 'rejected', label: 'Refusées' },
+          { key: 'paid', label: 'Payées' },
+        ].map(({ key, label }) => (
           <button
-            key={status}
-            onClick={() => setFilter(status)}
+            key={key}
+            onClick={() => setFilter(key)}
             className={`px-4 py-2 rounded whitespace-nowrap ${
-              filter === status
+              filter === key
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            {status === 'all' ? 'Toutes' : status.replace('_', ' ')}
+            {label}
           </button>
         ))}
       </div>
@@ -134,7 +141,15 @@ export default function MyClaimsPage() {
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-xl font-semibold">
-                      {claim.expense_type === 'car' ? '🚗' : '📄'} {claim.description || 'Sans description'}
+                      {claim.expense_type === 'car' ? '🚗' :
+                       claim.expense_type === 'train' ? '🚄' :
+                       claim.expense_type === 'hotel' ? '🏨' :
+                       claim.expense_type === 'meal' ? '🍽️' :
+                       claim.expense_type === 'plane' ? '✈️' :
+                       claim.expense_type === 'bus' ? '🚌' :
+                       claim.expense_type === 'toll' ? '🛣️' :
+                       claim.expense_type === 'parking' ? '🅿️' :
+                       claim.expense_type === 'taxi' ? '🚕' : '📄'} {claim.description || 'Sans description'}
                     </h3>
                     {getStatusBadge(claim.status)}
                   </div>
@@ -155,11 +170,31 @@ export default function MyClaimsPage() {
                 </div>
               </div>
 
-              {claim.expense_type === 'car' && (
+              {claim.expense_type === 'car' && claim.departure_location && (
                 <div className="flex gap-6 text-sm text-gray-600 mb-4">
                   <span>📍 {claim.departure_location} → {claim.arrival_location}</span>
                   <span>🛣️ {claim.distance_km} km</span>
                   <span>🚙 {claim.cv_fiscaux} CV</span>
+                </div>
+              )}
+
+              {claim.expense_type === 'train' && claim.departure_location && (
+                <div className="flex gap-6 text-sm text-gray-600 mb-4">
+                  <span>🚉 {claim.departure_location} → {claim.arrival_location}</span>
+                  {claim.distance_km && <span>📏 {claim.distance_km} km</span>}
+                </div>
+              )}
+
+              {claim.expense_type === 'hotel' && claim.merchant_name && (
+                <div className="flex gap-6 text-sm text-gray-600 mb-4">
+                  <span>🏨 {claim.merchant_name}</span>
+                  {claim.arrival_location && <span>📍 {claim.arrival_location}</span>}
+                </div>
+              )}
+
+              {claim.expense_type === 'meal' && claim.merchant_name && (
+                <div className="flex gap-6 text-sm text-gray-600 mb-4">
+                  <span>🍽️ {claim.merchant_name}</span>
                 </div>
               )}
 

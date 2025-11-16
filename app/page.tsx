@@ -135,7 +135,7 @@ export default function Home() {
                 📋 Mes Demandes
               </button>
               
-              {(userProfile?.role === 'ADMIN' || userProfile?.role === 'TREASURER' || userProfile?.role === 'VALIDATOR') && (
+              {(userProfile?.role === 'admin_asso' || userProfile?.role === 'treasurer' || userProfile?.role === 'validator') && (
                 <button
                   onClick={() => router.push('/validator')}
                   className="inline-block bg-orange-600 text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-orange-700 transition border-2 border-white"

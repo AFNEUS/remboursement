@@ -109,8 +109,8 @@ export default function ValidatorDashboard() {
 
       const claim = claims.find(c => c.id === claimId);
       if (claim) {
-        setSelectedClaim({ ...claim, items: items || [], justificatifs: justificatifs || [] });
-        setAdjustedAmount(claim.total_amount.toString());
+        setSelectedClaim({ ...claim, justificatifs: justificatifs || [] });
+        setAdjustedAmount(claim.total_amount?.toString() || '0');
         setShowDetails(true);
       }
     } catch (error) {
@@ -217,32 +217,88 @@ export default function ValidatorDashboard() {
       ) : showDetails && selectedClaim ? (
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">{selectedClaim.user_first_name} {selectedClaim.user_last_name}</h2>
+            <h2 className="text-2xl font-bold">
+              {selectedClaim.users?.full_name || `${selectedClaim.user_first_name || ''} ${selectedClaim.user_last_name || ''}`.trim() || 'Utilisateur'}
+            </h2>
             <button onClick={() => setShowDetails(false)} className="text-gray-500 hover:text-gray-700 text-2xl">✖️</button>
           </div>
 
           <div className="mb-6">
             <p className="text-gray-600 mb-2">{selectedClaim.description}</p>
-            <div className="flex gap-4 text-sm">
-              <span>📧 {selectedClaim.user_email}</span>
-              <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded">{selectedClaim.user_status_code}</span>
-              <span>📅 {formatDate(selectedClaim.created_at)}</span>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span>📧 {selectedClaim.users?.email || selectedClaim.user_email}</span>
+              <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded">{selectedClaim.expense_type}</span>
+              <span>📅 Créé: {formatDate(selectedClaim.created_at)}</span>
+              <span>📅 Dépense: {formatDate(selectedClaim.expense_date)}</span>
             </div>
           </div>
 
-          {selectedClaim.items && selectedClaim.items.length > 0 && (
+          {/* Détails de la dépense */}
+          <div className="mb-6">
+            <h3 className="font-semibold mb-3">Détails de la dépense</h3>
+            <div className="border rounded p-4 bg-gray-50 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Type:</span>
+                <span className="font-medium">{selectedClaim.expense_type}</span>
+              </div>
+              {selectedClaim.merchant_name && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Marchand:</span>
+                  <span className="font-medium">{selectedClaim.merchant_name}</span>
+                </div>
+              )}
+              {selectedClaim.departure_location && selectedClaim.arrival_location && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Trajet:</span>
+                  <span className="font-medium">{selectedClaim.departure_location} → {selectedClaim.arrival_location}</span>
+                </div>
+              )}
+              {selectedClaim.distance_km && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Distance:</span>
+                  <span className="font-medium">{selectedClaim.distance_km} km</span>
+                </div>
+              )}
+              {selectedClaim.cv_fiscaux && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Puissance fiscale:</span>
+                  <span className="font-medium">{selectedClaim.cv_fiscaux} CV</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t pt-2 mt-2">
+                <span className="text-gray-600">Montant TTC:</span>
+                <span className="font-bold">{formatAmount(selectedClaim.amount_ttc || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Montant calculé:</span>
+                <span className="font-bold">{formatAmount(selectedClaim.calculated_amount || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Taux appliqué:</span>
+                <span className="font-bold">{((selectedClaim.taux_applied || 0) * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Justificatifs */}
+          {selectedClaim.justificatifs && selectedClaim.justificatifs.length > 0 && (
             <div className="mb-6">
-              <h3 className="font-semibold mb-3">Dépenses ({selectedClaim.items.length})</h3>
-              <div className="space-y-3">
-                {selectedClaim.items.map((item: any, idx: number) => (
-                  <div key={item.id} className="border rounded p-4 bg-gray-50">
-                    <div className="flex justify-between">
-                      <div>
-                        <div className="font-medium">{idx + 1}. {item.description}</div>
-                        <div className="text-sm text-gray-600">{formatDate(item.expense_date)}</div>
-                      </div>
-                      <div className="text-lg font-bold text-blue-600">{formatAmount(item.amount)}</div>
+              <h3 className="font-semibold mb-3">Justificatifs ({selectedClaim.justificatifs.length})</h3>
+              <div className="space-y-2">
+                {selectedClaim.justificatifs.map((justif: any) => (
+                  <div key={justif.id} className="border rounded p-3 bg-gray-50 flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{justif.original_filename}</div>
+                      <div className="text-xs text-gray-500">{justif.file_type} • {(justif.file_size / 1024).toFixed(1)} KB</div>
                     </div>
+                    <a
+                      href={justif.storage_path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      📥 Voir
+                    </a>
                   </div>
                 ))}
               </div>
@@ -304,6 +360,7 @@ export default function ValidatorDashboard() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Demandeur</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Description</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
                 <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Montant</th>
@@ -314,12 +371,17 @@ export default function ValidatorDashboard() {
               {claims.map((claim) => (
                 <tr key={claim.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    <div className="font-medium">{claim.user_first_name} {claim.user_last_name}</div>
-                    <div className="text-xs text-gray-500">{claim.user_status_code}</div>
+                    <div className="font-medium">{claim.users?.full_name || 'Utilisateur'}</div>
+                    <div className="text-xs text-gray-500">{claim.users?.email}</div>
                   </td>
-                  <td className="px-6 py-4 text-sm">{claim.description}</td>
-                  <td className="px-6 py-4 text-sm">{formatDate(claim.created_at)}</td>
-                  <td className="px-6 py-4 text-right font-bold text-blue-600">{formatAmount(claim.total_amount)}</td>
+                  <td className="px-6 py-4">
+                    <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-medium">
+                      {claim.expense_type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm max-w-xs truncate">{claim.description}</td>
+                  <td className="px-6 py-4 text-sm">{formatDate(claim.expense_date || claim.created_at)}</td>
+                  <td className="px-6 py-4 text-right font-bold text-blue-600">{formatAmount(claim.total_amount || claim.reimbursable_amount || 0)}</td>
                   <td className="px-6 py-4 text-center">
                     <button
                       onClick={() => loadClaimDetails(claim.id)}
