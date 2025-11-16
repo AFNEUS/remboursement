@@ -29,6 +29,9 @@ interface ExpenseItem {
   passengers?: Passenger[];
   fuelReceipt?: File;
   tollReceipt?: File;
+  distanceKm?: number;
+  fiscalPower?: number;
+  trainSegments?: any[];
 }
 
 const EXPENSE_TYPES = [
@@ -67,6 +70,7 @@ export default function NewClaimPage() {
     type: 'car' as any,
     date: new Date().toISOString().split('T')[0],
     passengers: [],
+    trainSegments: [],
   });
   
   const [departure, setDeparture] = useState('');
@@ -275,6 +279,9 @@ export default function NewClaimPage() {
       passengers: currentExpense.passengers,
       fuelReceipt: currentExpense.fuelReceipt,
       tollReceipt: currentExpense.tollReceipt,
+      distanceKm: currentExpense.type === 'car' ? parseFloat(distance || '0') || 0 : undefined,
+      fiscalPower: currentExpense.type === 'car' ? parseInt(fiscalPower) : undefined,
+      trainSegments: currentExpense.trainSegments || [],
     };
     
     if (exceedsLimit) {
@@ -288,6 +295,7 @@ export default function NewClaimPage() {
       type: 'car' as any,
       date: new Date().toISOString().split('T')[0],
       passengers: [],
+      trainSegments: [],
     });
     setDeparture('');
     setArrival('');
@@ -351,8 +359,8 @@ export default function NewClaimPage() {
         currency: 'EUR',
         departure_location: firstExpense.departure || null,
         arrival_location: firstExpense.arrival || null,
-        distance_km: firstExpense.type === 'car' ? parseFloat(distance || '0') : null,
-        cv_fiscaux: firstExpense.type === 'car' ? parseInt(fiscalPower) : null,
+        distance_km: firstExpense.type === 'car' ? firstExpense.distanceKm || null : null,
+        cv_fiscaux: firstExpense.type === 'car' ? firstExpense.fiscalPower || null : null,
       };
       
       console.log('[Claims Submit] Données à envoyer:', claimData);
