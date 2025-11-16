@@ -524,7 +524,7 @@ export default function NewClaimPage() {
                     <div className="absolute z-20 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                       {departureSuggestions.map((city, i) => (
                         <div key={i} onMouseDown={() => selectCity(city.name, true)} className="px-4 py-3 hover:bg-blue-50 cursor-pointer">
-                          {city.name} <span className="text-xs text-gray-500">({city.region})</span>
+                          {city.name} <span className="text-xs text-gray-500">({city.code})</span>
                         </div>
                       ))}
                     </div>
@@ -548,7 +548,7 @@ export default function NewClaimPage() {
                     <div className="absolute z-20 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                       {arrivalSuggestions.map((city, i) => (
                         <div key={i} onMouseDown={() => selectCity(city.name, false)} className="px-4 py-3 hover:bg-blue-50 cursor-pointer">
-                          {city.name} <span className="text-xs text-gray-500">({city.region})</span>
+                          {city.name} <span className="text-xs text-gray-500">({city.code})</span>
                         </div>
                       ))}
                     </div>

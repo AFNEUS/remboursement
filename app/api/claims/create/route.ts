@@ -60,15 +60,37 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Récupérer le profil utilisateur via admin client (bypass RLS)
-    const { data: userProfile, error: profileError } = await supabaseAdmin
+    let { data: userProfile, error: profileError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('id', userId)
       .single();
 
     if (profileError || !userProfile) {
-      console.error('[API /api/claims/create] Erreur profil:', profileError);
-      return NextResponse.json({ error: 'Profil utilisateur non trouvé' }, { status: 404 });
+      console.log('[API /api/claims/create] Profil non trouvé, création automatique...');
+
+      // Auto-créer l'utilisateur avec les infos de base
+      const { data: newUser, error: createError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          id: userId,
+          email: userEmail || 'unknown@afneus.org',
+          full_name: userEmail?.split('@')[0] || 'Utilisateur',
+          role: 'user',
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      if (createError || !newUser) {
+        console.error('[API /api/claims/create] Erreur création profil:', createError);
+        return NextResponse.json({
+          error: 'Profil utilisateur non trouvé et création impossible. Vérifiez que la table "users" existe dans Supabase.'
+        }, { status: 404 });
+      }
+
+      userProfile = newUser;
+      console.log('[API /api/claims/create] Profil créé automatiquement:', userProfile);
     }
 
     // Vérifier l'IBAN si fourni (optionnel - pas bloquant pour création)
@@ -82,24 +104,34 @@ export async function POST(request: NextRequest) {
     // NOTE: On ne bloque plus si l'IBAN n'est pas vérifié - cela sera requis au moment du paiement
 
     // Récupérer les barèmes, taux et plafonds via admin client (bypass RLS)
-    const [baremes, taux, plafonds, trainBaremesResult] = await Promise.all([
-      supabaseAdmin.from('baremes').select('*').is('valid_to', null),
-      supabaseAdmin.from('taux_remboursement').select('*').is('valid_to', null),
-      supabaseAdmin.from('plafonds').select('*').is('valid_to', null),
-      supabaseAdmin.from('train_baremes').select('*').is('valid_to', null),
-    ]);
+    // Utiliser des valeurs par défaut si les tables n'existent pas
+    let baremesData: any[] = [];
+    let tauxData: any[] = [];
+    let plafondsData: any[] = [];
+    let trainBaremesData: any[] = [];
 
-    if (!baremes.data || !taux.data || !plafonds.data) {
-      console.error('[API /api/claims/create] Erreur récupération paramètres:', {
-        baremes: baremes.error,
-        taux: taux.error,
-        plafonds: plafonds.error,
-      });
-      return NextResponse.json({ error: 'Erreur lors de la récupération des paramètres' }, { status: 500 });
+    try {
+      const [baremes, taux, plafonds, trainBaremesResult] = await Promise.all([
+        supabaseAdmin.from('baremes').select('*').is('valid_to', null),
+        supabaseAdmin.from('taux_remboursement').select('*').is('valid_to', null),
+        supabaseAdmin.from('plafonds').select('*').is('valid_to', null),
+        supabaseAdmin.from('train_baremes').select('*').is('valid_to', null),
+      ]);
+
+      baremesData = baremes.data || [];
+      tauxData = taux.data || [];
+      plafondsData = plafonds.data || [];
+      trainBaremesData = trainBaremesResult.data || [];
+
+      if (baremes.error) console.warn('[API] Table baremes manquante:', baremes.error.message);
+      if (taux.error) console.warn('[API] Table taux_remboursement manquante:', taux.error.message);
+      if (plafonds.error) console.warn('[API] Table plafonds manquante:', plafonds.error.message);
+    } catch (err) {
+      console.warn('[API /api/claims/create] Tables de configuration manquantes, utilisation des valeurs par défaut');
     }
 
     // Convertir les barèmes train en format attendu
-    const trainBaremes = (trainBaremesResult.data || []).map((b: any) => ({
+    const trainBaremes = trainBaremesData.map((b: any) => ({
       distance_min_km: b.distance_min_km,
       distance_max_km: b.distance_max_km,
       percentage_refund: b.percentage_refund,
@@ -111,9 +143,9 @@ export async function POST(request: NextRequest) {
     const calculation = await calculateReimbursableAmount(
       body,
       userProfile.role,
-      baremes.data,
-      taux.data,
-      plafonds.data,
+      baremesData,
+      tauxData,
+      plafondsData,
       trainBaremes.length > 0 ? trainBaremes : undefined
     );
     
