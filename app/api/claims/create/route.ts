@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { calculateReimbursableAmount, validateIBAN, generateClaimReference } from '@/lib/reimbursement';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { Database } from '@/lib/database.types';
 
@@ -15,28 +15,50 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    
     console.log('[API /api/claims/create] Nouvelle requête reçue');
-    
-    // Vérifier l'authentification
-    const {
-      data: { session },
-      error: authError,
-    } = await supabase.auth.getSession();
-    console.log('[API /api/claims/create] Session:', session ? 'Présente' : 'Absente');
-    console.log('[API /api/claims/create] Auth error:', authError);
-    
-    if (authError || !session) {
-      console.error('[API /api/claims/create] Authentification échouée');
-      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    // Récupérer le token depuis le header Authorization
+    const authHeader = request.headers.get('Authorization');
+    let userId: string | null = null;
+    let userEmail: string | null = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+
+      // Vérifier le token avec Supabase Admin
+      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+      if (authError || !user) {
+        console.error('[API /api/claims/create] Token invalide:', authError);
+        return NextResponse.json({ error: 'Token invalide ou expiré' }, { status: 401 });
+      }
+
+      userId = user.id;
+      userEmail = user.email || null;
+      console.log('[API /api/claims/create] Authentifié via Bearer token:', userId);
+    } else {
+      // Fallback: essayer de lire les cookies (pour compatibilité)
+      const cookieStore = cookies();
+      const accessToken = cookieStore.get('sb-access-token')?.value;
+
+      if (accessToken) {
+        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(accessToken);
+
+        if (!authError && user) {
+          userId = user.id;
+          userEmail = user.email || null;
+          console.log('[API /api/claims/create] Authentifié via cookie:', userId);
+        }
+      }
     }
-    
-    const userId = session.user.id;
-    console.log('[API /api/claims/create] User ID:', userId);
-    
+
+    if (!userId) {
+      console.error('[API /api/claims/create] Aucune authentification valide trouvée');
+      return NextResponse.json({ error: 'Non authentifié. Veuillez vous reconnecter.' }, { status: 401 });
+    }
+
     const body = await request.json();
-    
+
     // Récupérer le profil utilisateur via admin client (bypass RLS)
     const { data: userProfile, error: profileError } = await supabaseAdmin
       .from('users')
@@ -146,7 +168,7 @@ export async function POST(request: NextRequest) {
     // Logger dans l'audit
     await supabaseAdmin.from('audit_logs').insert({
       actor_id: userId,
-      actor_email: session.user.email,
+      actor_email: userEmail || userProfile.email,
       actor_role: userProfile.role,
       action: 'create',
       entity_type: 'expense_claim',
