@@ -29,20 +29,21 @@ export async function POST(
     const claimId = params.id;
     const body = await request.json();
     const action = body.action; // 'validate', 'refuse', 'request_info', 'submit'
-    
-    // Récupérer le profil utilisateur
-    const { data: userProfile } = await supabase
+
+    // Récupérer le profil utilisateur via admin client (bypass RLS)
+    const { data: userProfile, error: profileError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('id', userId)
       .single();
-    
-    if (!userProfile) {
+
+    if (profileError || !userProfile) {
+      console.error('[API /claims/action] Erreur profil:', profileError);
       return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
     }
-    
-    // Récupérer la demande
-    const { data: claim, error: claimError } = await supabase
+
+    // Récupérer la demande via admin client (bypass RLS)
+    const { data: claim, error: claimError } = await supabaseAdmin
       .from('expense_claims')
       .select('*')
       .eq('id', claimId)
