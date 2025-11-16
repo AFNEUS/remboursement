@@ -1,8 +1,9 @@
-// @ts-nocheck
+// @ts-nocheck - Types Supabase incompatibles avec schéma actuel, à regénérer
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { Database } from '@/lib/database.types';
 
 // Force dynamic rendering (uses cookies for auth)
 export const dynamic = 'force-dynamic';
@@ -52,7 +53,8 @@ export async function POST(
     }
     
     // Variables pour la mise à jour
-    let updateData: any = {};
+    type ClaimUpdateData = Database['public']['Tables']['expense_claims']['Update'];
+    let updateData: ClaimUpdateData = {};
     let notificationMessage = '';
     let notificationType = '';
     

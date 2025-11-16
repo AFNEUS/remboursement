@@ -1,9 +1,10 @@
-// @ts-nocheck
+// @ts-nocheck - Types Supabase incompatibles avec schéma actuel
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { calculateReimbursableAmount, validateIBAN, detectDuplicates, generateClaimReference } from '@/lib/reimbursement';
+import { calculateReimbursableAmount, validateIBAN, generateClaimReference } from '@/lib/reimbursement';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { Database } from '@/lib/database.types';
 
 // Force dynamic rendering (uses cookies for auth)
 export const dynamic = 'force-dynamic';
