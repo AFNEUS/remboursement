@@ -7,6 +7,17 @@ type Plafond = Database['public']['Tables']['plafonds']['Row'];
 type UserRole = Database['public']['Tables']['users']['Row']['role'];
 
 /**
+ * Interface pour les barèmes train (structure cohérente avec SQL)
+ */
+export interface TrainBaremeData {
+  distance_min_km: number;
+  distance_max_km: number;
+  percentage_refund: number;
+  max_amount_euros: number | null;
+  description: string;
+}
+
+/**
  * Interface pour le résultat du calcul de remboursement
  */
 export interface ReimbursementCalculation {
@@ -24,6 +35,57 @@ export interface ReimbursementCalculation {
 }
 
 /**
+ * Calculer le remboursement train basé sur la distance
+ */
+export function calculateTrainRefund(
+  distanceKm: number,
+  ticketPrice: number,
+  trainBaremes: TrainBaremeData[]
+): { refund: number; percentage: number; maxApplied: number | null; description: string } {
+  // Trouver le barème applicable
+  const bareme = trainBaremes.find(
+    (b) => distanceKm >= b.distance_min_km && distanceKm < b.distance_max_km
+  );
+
+  if (!bareme) {
+    // Si pas de barème trouvé, appliquer 70% avec max 250€ (défaut longue distance)
+    const calculated = ticketPrice * 0.70;
+    const refund = Math.min(calculated, 250);
+    return {
+      refund,
+      percentage: 70,
+      maxApplied: 250,
+      description: 'Distance hors barème - 70% max 250€',
+    };
+  }
+
+  const calculated = ticketPrice * (bareme.percentage_refund / 100);
+  const refund = bareme.max_amount_euros
+    ? Math.min(calculated, bareme.max_amount_euros)
+    : calculated;
+
+  return {
+    refund: Math.round(refund * 100) / 100,
+    percentage: bareme.percentage_refund,
+    maxApplied: bareme.max_amount_euros,
+    description: bareme.description,
+  };
+}
+
+/**
+ * Barèmes train par défaut (si pas chargés depuis DB)
+ */
+const DEFAULT_TRAIN_BAREMES: TrainBaremeData[] = [
+  { distance_min_km: 0, distance_max_km: 150, percentage_refund: 100, max_amount_euros: 50, description: 'Courte distance (<150km) - 100% max 50€' },
+  { distance_min_km: 150, distance_max_km: 350, percentage_refund: 100, max_amount_euros: 80, description: 'Moyenne distance (150-350km) - 100% max 80€' },
+  { distance_min_km: 350, distance_max_km: 550, percentage_refund: 95, max_amount_euros: 120, description: 'Longue distance (350-550km) - 95% max 120€' },
+  { distance_min_km: 550, distance_max_km: 800, percentage_refund: 90, max_amount_euros: 160, description: 'Très longue distance (550-800km) - 90% max 160€' },
+  { distance_min_km: 800, distance_max_km: 1200, percentage_refund: 85, max_amount_euros: 200, description: 'Extra-longue distance (800-1200km) - 85% max 200€' },
+  { distance_min_km: 1200, distance_max_km: 2000, percentage_refund: 80, max_amount_euros: 250, description: 'DOM-TOM proche (1200-2000km) - 80% max 250€' },
+  { distance_min_km: 2000, distance_max_km: 10000, percentage_refund: 70, max_amount_euros: 350, description: 'DOM-TOM éloigné (>2000km) - 70% max 350€' },
+];
+
+/**
  * Calculer le montant remboursable pour une demande
  */
 export async function calculateReimbursableAmount(
@@ -31,21 +93,23 @@ export async function calculateReimbursableAmount(
   userRole: UserRole,
   baremes: Bareme[],
   taux: TauxRemboursement[],
-  plafonds: Plafond[]
+  plafonds: Plafond[],
+  trainBaremes: TrainBaremeData[] = DEFAULT_TRAIN_BAREMES
 ): Promise<ReimbursementCalculation> {
   const breakdown: { description: string; value: number }[] = [];
   const warnings: string[] = [];
-  
+
   let baseAmount = 0;
   let rateApplied = 0;
-  
+  let skipRoleRate = false; // Pour le train, on n'applique pas le taux de rôle
+
   // 1. Calculer le montant de base selon le type de dépense
   if (claim.expense_type === 'car' && claim.distance_km && claim.cv_fiscaux) {
     // Transport en voiture : km × barème
     const bareme = baremes.find(
       (b) => b.cv_fiscaux === claim.cv_fiscaux && (!b.valid_to || new Date(b.valid_to) >= new Date())
     );
-    
+
     if (!bareme) {
       warnings.push(`Aucun barème trouvé pour ${claim.cv_fiscaux} CV`);
       baseAmount = claim.amount_ttc || 0;
@@ -56,6 +120,20 @@ export async function calculateReimbursableAmount(
         value: baseAmount,
       });
     }
+  } else if (claim.expense_type === 'train' && claim.distance_km && claim.amount_ttc) {
+    // Transport en train : calcul intelligent basé sur distance
+    const trainCalc = calculateTrainRefund(claim.distance_km, claim.amount_ttc, trainBaremes);
+    baseAmount = trainCalc.refund;
+    skipRoleRate = true; // Le train a déjà ses propres règles de remboursement
+
+    breakdown.push({
+      description: `Billet train ${claim.amount_ttc}€ - ${trainCalc.description}`,
+      value: claim.amount_ttc,
+    });
+    breakdown.push({
+      description: `Remboursement ${trainCalc.percentage}%${trainCalc.maxApplied ? ` (max ${trainCalc.maxApplied}€)` : ''}`,
+      value: baseAmount,
+    });
   } else {
     // Autres types : montant TTC réel
     baseAmount = claim.amount_ttc || 0;
@@ -64,28 +142,40 @@ export async function calculateReimbursableAmount(
       value: baseAmount,
     });
   }
-  
-  // 2. Appliquer le taux selon le rôle
-  const tauxRole = taux.find(
-    (t) => 
-      (userRole === 'bn_member' && t.role === 'bn_member') ||
-      (userRole === 'admin_asso' && t.role === 'admin_asso') ||
-      (!['bn_member', 'admin_asso'].includes(userRole) && t.role === 'user')
-  );
-  
-  if (!tauxRole) {
-    warnings.push(`Aucun taux trouvé pour le rôle ${userRole}, utilisation de 50% par défaut`);
-    rateApplied = 0.50;
+
+  // 2. Appliquer le taux selon le rôle (sauf pour train qui a ses propres règles)
+  let calculatedAmount: number;
+
+  if (skipRoleRate) {
+    // Pour le train, on n'applique pas le taux de rôle (déjà calculé)
+    calculatedAmount = baseAmount;
+    rateApplied = 1.0; // 100% du montant calculé
+    breakdown.push({
+      description: `Montant train (règles spécifiques distance)`,
+      value: calculatedAmount,
+    });
   } else {
-    rateApplied = parseFloat(tauxRole.taux.toString());
+    const tauxRole = taux.find(
+      (t) =>
+        (userRole === 'bn_member' && t.role === 'bn_member') ||
+        (userRole === 'admin_asso' && t.role === 'admin_asso') ||
+        (!['bn_member', 'admin_asso'].includes(userRole) && t.role === 'user')
+    );
+
+    if (!tauxRole) {
+      warnings.push(`Aucun taux trouvé pour le rôle ${userRole}, utilisation de 50% par défaut`);
+      rateApplied = 0.50;
+    } else {
+      rateApplied = parseFloat(tauxRole.taux.toString());
+    }
+
+    calculatedAmount = baseAmount * rateApplied;
+
+    breakdown.push({
+      description: `Application du taux ${(rateApplied * 100).toFixed(0)}% (${userRole})`,
+      value: calculatedAmount,
+    });
   }
-  
-  const calculatedAmount = baseAmount * rateApplied;
-  
-  breakdown.push({
-    description: `Application du taux ${(rateApplied * 100).toFixed(0)}% (${userRole})`,
-    value: calculatedAmount,
-  });
   
   // 3. Vérifier les plafonds
   let reimbursableAmount = calculatedAmount;
