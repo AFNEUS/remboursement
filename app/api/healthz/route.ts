@@ -5,17 +5,18 @@
 // ================================================================
 
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/client';
 
 export async function GET() {
   const checks: Record<string, { status: 'ok' | 'error'; message?: string }> = {};
 
-  // Check 1: Supabase connectivité
+  // Check 1: Supabase connectivité (import dynamique pour éviter erreurs de build)
   try {
+    const { supabase } = await import('@/lib/supabase/client');
     const { error } = await supabase.from('users').select('count').limit(1).single();
     checks.supabase = error ? { status: 'error', message: error.message } : { status: 'ok' };
-  } catch (e: any) {
-    checks.supabase = { status: 'error', message: e.message };
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+    checks.supabase = { status: 'error', message: errorMessage };
   }
 
   // Check 2: Variables d'environnement critiques

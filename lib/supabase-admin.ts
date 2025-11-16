@@ -22,29 +22,55 @@ if (typeof window !== 'undefined') {
   );
 }
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// Lazy initialization pour éviter les erreurs de build
+let _supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null;
 
-if (!supabaseUrl || !serviceRoleKey) {
-  throw new Error(
-    '❌ Missing Supabase environment variables for admin client. ' +
-    'Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env'
+function getSupabaseAdmin() {
+  if (_supabaseAdmin) {
+    return _supabaseAdmin;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('❌ Missing Supabase environment variables');
+    console.error('URL:', supabaseUrl ? 'OK' : 'manquante');
+    console.error('Key:', serviceRoleKey ? 'OK' : 'manquante');
+    throw new Error(
+      '❌ Missing Supabase environment variables for admin client. ' +
+      'Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env'
+    );
+  }
+
+  _supabaseAdmin = createClient<Database>(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+      db: {
+        schema: 'public',
+      },
+    }
   );
+
+  return _supabaseAdmin;
 }
 
-export const supabaseAdmin = createClient<Database>(
-  supabaseUrl,
-  serviceRoleKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-    db: {
-      schema: 'public',
-    },
-  }
-);
+// Export un proxy qui initialise lazy
+export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient<Database>>, {
+  get(_, prop) {
+    const client = getSupabaseAdmin();
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    return value;
+  },
+});
 
 // ================================================================
 // Helper: Vérifier que l'utilisateur est bien admin

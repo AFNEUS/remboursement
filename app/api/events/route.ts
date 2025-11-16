@@ -1,8 +1,9 @@
-// @ts-nocheck
+// @ts-nocheck - Types Supabase incompatibles avec schéma actuel
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -10,29 +11,21 @@ export const dynamic = 'force-dynamic';
 // GET /api/events : liste tous les événements
 export async function GET() {
   try {
-    // Essayer via supabaseAdmin (bypass RLS)
-    try {
-      const { supabaseAdmin } = await import('@/lib/supabase-admin');
-      const { data, error } = await supabaseAdmin
-        .from('events')
-        .select('*')
-        .order('start_date', { ascending: false });
-      if (error) throw error;
-      return NextResponse.json(data);
-    } catch (e) {
-      console.warn('[GET /api/events] Admin client indisponible, fallback RLS:', (e as any)?.message);
-      // Fallback: utiliser le client lié aux cookies (RLS) – nécessite un user authentifié
-      const supabase = createRouteHandlerClient({ cookies });
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('start_date', { ascending: false });
-      if (error) throw error;
-      return NextResponse.json(data);
+    const { data, error } = await supabaseAdmin
+      .from('events')
+      .select('*')
+      .order('start_date', { ascending: false });
+
+    if (error) {
+      console.error('[GET /api/events] Erreur:', error);
+      throw error;
     }
-  } catch (error: any) {
+
+    return NextResponse.json(data);
+  } catch (error: unknown) {
     console.error('Erreur serveur GET /api/events:', error);
-    return NextResponse.json({ error: error.message || 'Erreur serveur' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Erreur serveur';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
@@ -76,9 +69,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, description, event_type, start_date, end_date, location, departure_city, custom_km_cap, carpooling_bonus_cap_percent, allow_carpooling_bonus, max_train_amount, max_hotel_per_night, max_meal_amount, allowed_expense_types } = body;
+    const { name, description, event_type, start_date, end_date, location, departure_city, custom_km_cap, carpooling_bonus_cap_percent, allow_carpooling_bonus, max_train_amount, max_hotel_per_night, max_meal_amount } = body;
 
-    const { supabaseAdmin } = await import('@/lib/supabase-admin');
     const { data, error } = await supabaseAdmin
       .from('events')
       .insert([
@@ -96,7 +88,6 @@ export async function POST(req: NextRequest) {
           max_train_amount,
           max_hotel_per_night,
           max_meal_amount,
-          allowed_expense_types,
           created_by: userId,
         },
       ])
@@ -136,7 +127,7 @@ export async function PUT(req: NextRequest) {
     }
     
     const body = await req.json();
-    const { id, name, description, event_type, start_date, end_date, location, departure_city, custom_km_cap, carpooling_bonus_cap_percent, allow_carpooling_bonus, max_train_amount, max_hotel_per_night, max_meal_amount, allowed_expense_types } = body;
+    const { id, name, description, event_type, start_date, end_date, location, departure_city, custom_km_cap, carpooling_bonus_cap_percent, allow_carpooling_bonus, max_train_amount, max_hotel_per_night, max_meal_amount } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID manquant' }, { status: 400 });
@@ -158,7 +149,6 @@ export async function PUT(req: NextRequest) {
         max_train_amount,
         max_hotel_per_night,
         max_meal_amount,
-        allowed_expense_types,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
