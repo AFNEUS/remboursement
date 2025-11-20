@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { searchCities, calculateDistance } from '@/lib/cities-france';
 import { calculateKilometricAmount, formatAmount } from '@/lib/calculations';
+import { toast } from 'sonner';
 
 type ExpenseType = 'car' | 'train' | 'transport' | 'meal' | 'hotel' | 'registration' | 'other';
 
@@ -87,6 +88,7 @@ export default function NewClaimPage() {
   const [transportComparison, setTransportComparison] = useState<TransportComparison | null>(null);
   const [estimatedRefund, setEstimatedRefund] = useState<number>(0);
   const [justificatifs, setJustificatifs] = useState<File[]>([]);
+  const [filePreview, setFilePreview] = useState<{[key: string]: string}>({});
 
   // Load user profile and events
   useEffect(() => {
@@ -224,12 +226,9 @@ export default function NewClaimPage() {
     let userRate = 0.50; // Membre standard
     let roleName = 'Membre';
 
-    if (userProfile.role === 'admin_asso') {
+    if (userProfile.role === 'admin_asso' || userProfile.role === 'bn_member' || userProfile.role === 'treasurer') {
       userRate = 0.80;
-      roleName = 'Admin';
-    } else if (userProfile.role === 'bn_member' || userProfile.role === 'treasurer') {
-      userRate = 0.65;
-      roleName = 'Bureau National';
+      roleName = userProfile.role === 'admin_asso' ? 'Admin' : 'Bureau National';
     }
 
     // Plafonds par défaut
@@ -310,23 +309,72 @@ export default function NewClaimPage() {
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
-    setJustificatifs(prev => [...prev, ...files]);
+
+    // Validation des fichiers
+    const validFiles: File[] = [];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+
+    files.forEach(file => {
+      if (file.size > maxSize) {
+        toast.error(`❌ ${file.name} est trop volumineux (max 5MB)`);
+        return;
+      }
+
+      // Générer la prévisualisation pour les images
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFilePreview(prev => ({ ...prev, [file.name]: reader.result as string }));
+        };
+        reader.readAsDataURL(file);
+      }
+
+      validFiles.push(file);
+    });
+
+    if (validFiles.length > 0) {
+      setJustificatifs(prev => [...prev, ...validFiles]);
+      toast.success(`✅ ${validFiles.length} fichier(s) ajouté(s)`);
+    }
+  }
+
+  function removeFile(index: number) {
+    const file = justificatifs[index];
+    setJustificatifs(prev => prev.filter((_, i) => i !== index));
+    setFilePreview(prev => {
+      const newPreview = { ...prev };
+      delete newPreview[file.name];
+      return newPreview;
+    });
+    toast.info(`🗑️ ${file.name} supprimé`);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    // Validation
     if (!motive.trim()) {
-      alert('Veuillez indiquer le motif');
+      toast.error('Veuillez indiquer le motif de votre demande');
       return;
     }
 
     if (!amountTTC || amountTTC <= 0) {
-      alert('Montant invalide');
+      toast.error('Veuillez entrer un montant valide');
+      return;
+    }
+
+    if ((expenseType === 'car' || expenseType === 'train') && !departure) {
+      toast.error('Veuillez sélectionner une ville de départ');
+      return;
+    }
+
+    if ((expenseType === 'car' || expenseType === 'train') && !arrival) {
+      toast.error('Veuillez sélectionner une ville d\'arrivée');
       return;
     }
 
     setLoading(true);
+    toast.loading('Création de votre demande en cours...');
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -372,24 +420,42 @@ export default function NewClaimPage() {
 
       const claimId = result.claim.id;
 
-      // Upload justificatifs avec gestion d'erreur
+      // Upload justificatifs avec progress bar
+      toast.dismiss();
       const uploadErrors: string[] = [];
-      for (const file of justificatifs) {
-        try {
-          const path = `${claimId}/${Date.now()}_${file.name}`;
-          const { error: uploadError } = await supabase.storage
-            .from('justificatifs')
-            .upload(path, file);
+      const totalFiles = justificatifs.length;
 
-          if (uploadError) {
-            uploadErrors.push(`${file.name}: ${uploadError.message}`);
+      if (totalFiles > 0) {
+        for (let i = 0; i < totalFiles; i++) {
+          const file = justificatifs[i];
+          toast.loading(`Upload ${i + 1}/${totalFiles} : ${file.name}...`);
+
+          try {
+            const path = `${claimId}/${Date.now()}_${file.name}`;
+            const { error: uploadError } = await supabase.storage
+              .from('justificatifs')
+              .upload(path, file);
+
+            if (uploadError) {
+              uploadErrors.push(file.name);
+              toast.error(`❌ ${file.name} : ${uploadError.message}`);
+            } else {
+              toast.success(`✅ ${file.name} uploadé`);
+            }
+          } catch (err: any) {
+            uploadErrors.push(file.name);
+            toast.error(`❌ ${file.name} : ${err.message}`);
           }
-        } catch (err: any) {
-          uploadErrors.push(`${file.name}: ${err.message}`);
+
+          // Petit délai pour que l'utilisateur voie les toasts
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
 
+      toast.dismiss();
+
       // Soumettre automatiquement le claim
+      toast.loading('Soumission de votre demande...');
       try {
         const submitResponse = await fetch(`/api/claims/${claimId}/submit`, {
           method: 'POST',
@@ -401,22 +467,35 @@ export default function NewClaimPage() {
         if (!submitResponse.ok) {
           const submitResult = await submitResponse.json();
           console.warn('Échec de soumission automatique:', submitResult.error);
-          // On ne bloque pas l'utilisateur, il pourra soumettre manuellement
+          toast.warning('La demande a été créée mais pas soumise automatiquement');
         }
       } catch (submitErr) {
         console.warn('Échec de soumission automatique:', submitErr);
+        toast.warning('La demande a été créée mais pas soumise automatiquement');
       }
+
+      toast.dismiss();
 
       // Message de succès
-      let message = `✅ Demande créée et soumise !\nRemboursement estimé : ${formatAmount(result.calculation.reimbursableAmount)}`;
-      if (uploadErrors.length > 0) {
-        message += `\n\n⚠️ Erreurs upload (${uploadErrors.length} fichiers) :\n${uploadErrors.join('\n')}`;
+      const refundAmount = formatAmount(result.calculation.reimbursableAmount);
+
+      if (uploadErrors.length === 0) {
+        toast.success(`✅ Demande créée et soumise avec succès ! Remboursement estimé : ${refundAmount}`, {
+          duration: 7000,
+        });
+      } else {
+        toast.warning(`⚠️ Demande créée mais ${uploadErrors.length} fichier(s) n'ont pas pu être uploadés`, {
+          duration: 7000,
+        });
       }
 
-      alert(message);
-      router.push('/claims');
+      setTimeout(() => router.push('/claims'), 1000);
     } catch (error: any) {
-      alert('❌ Erreur : ' + error.message);
+      toast.dismiss();
+      toast.error(`❌ Erreur : ${error.message}`, {
+        description: 'Veuillez réessayer ou contacter le support',
+        duration: 10000,
+      });
     } finally {
       setLoading(false);
     }
@@ -746,8 +825,10 @@ export default function NewClaimPage() {
 
           {/* Justificatifs */}
           <div className="bg-white rounded-lg shadow p-6">
-            <label className="block font-semibold mb-2">Justificatifs</label>
-            <div className="border-2 border-dashed rounded-lg p-6 text-center">
+            <label className="block font-semibold mb-2">
+              Justificatifs {justificatifs.length > 0 && <span className="text-blue-600">({justificatifs.length})</span>}
+            </label>
+            <div className="border-2 border-dashed rounded-lg p-6 text-center hover:border-blue-400 transition">
               <input
                 type="file"
                 onChange={handleFileUpload}
@@ -759,15 +840,41 @@ export default function NewClaimPage() {
               <label htmlFor="file-upload" className="cursor-pointer">
                 <div className="text-3xl mb-2">📎</div>
                 <div className="text-blue-600 font-medium">Ajouter des justificatifs</div>
-                <div className="text-sm text-gray-500">Billets, factures, reçus...</div>
+                <div className="text-sm text-gray-500">Images ou PDF • Max 5MB par fichier</div>
               </label>
             </div>
             {justificatifs.length > 0 && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                 {justificatifs.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between bg-gray-50 p-2 rounded text-sm">
-                    <span>📄 {f.name}</span>
-                    <button type="button" onClick={() => setJustificatifs(prev => prev.filter((_, idx) => idx !== i))} className="text-red-600">✕</button>
+                  <div key={i} className="border rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition">
+                    {filePreview[f.name] ? (
+                      <div className="mb-2">
+                        <img
+                          src={filePreview[f.name]}
+                          alt={f.name}
+                          className="w-full h-32 object-cover rounded"
+                        />
+                      </div>
+                    ) : (
+                      <div className="mb-2 h-32 bg-gray-200 rounded flex items-center justify-center">
+                        <span className="text-4xl">📄</span>
+                      </div>
+                    )}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{f.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {(f.size / 1024).toFixed(1)} KB
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="ml-2 text-red-600 hover:text-red-700 font-bold text-lg"
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

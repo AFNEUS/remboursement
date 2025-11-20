@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import Navigation from '@/components/Navigation';
+import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
   title: 'AFNEUS - Remboursements',
@@ -30,6 +31,12 @@ export default function RootLayout({
       <body className="min-h-screen bg-gray-50">
         <Navigation />
         {children}
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          duration={5000}
+        />
       </body>
     </html>
   );
