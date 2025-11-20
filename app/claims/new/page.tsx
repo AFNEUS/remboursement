@@ -370,13 +370,50 @@ export default function NewClaimPage() {
         throw new Error(result.error || 'Erreur de création');
       }
 
-      // Upload justificatifs
+      const claimId = result.claim.id;
+
+      // Upload justificatifs avec gestion d'erreur
+      const uploadErrors: string[] = [];
       for (const file of justificatifs) {
-        const path = `${result.claim.id}/${Date.now()}_${file.name}`;
-        await supabase.storage.from('justificatifs').upload(path, file);
+        try {
+          const path = `${claimId}/${Date.now()}_${file.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from('justificatifs')
+            .upload(path, file);
+
+          if (uploadError) {
+            uploadErrors.push(`${file.name}: ${uploadError.message}`);
+          }
+        } catch (err: any) {
+          uploadErrors.push(`${file.name}: ${err.message}`);
+        }
       }
 
-      alert(`✅ Demande créée !\nRemboursement estimé : ${formatAmount(result.calculation.reimbursableAmount)}`);
+      // Soumettre automatiquement le claim
+      try {
+        const submitResponse = await fetch(`/api/claims/${claimId}/submit`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (!submitResponse.ok) {
+          const submitResult = await submitResponse.json();
+          console.warn('Échec de soumission automatique:', submitResult.error);
+          // On ne bloque pas l'utilisateur, il pourra soumettre manuellement
+        }
+      } catch (submitErr) {
+        console.warn('Échec de soumission automatique:', submitErr);
+      }
+
+      // Message de succès
+      let message = `✅ Demande créée et soumise !\nRemboursement estimé : ${formatAmount(result.calculation.reimbursableAmount)}`;
+      if (uploadErrors.length > 0) {
+        message += `\n\n⚠️ Erreurs upload (${uploadErrors.length} fichiers) :\n${uploadErrors.join('\n')}`;
+      }
+
+      alert(message);
       router.push('/claims');
     } catch (error: any) {
       alert('❌ Erreur : ' + error.message);
