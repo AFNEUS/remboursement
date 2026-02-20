@@ -97,26 +97,33 @@ function AuthPageContent() {
         throw new Error('Utilisateur non trouvé');
       }
 
-      // Vérifier que le profil existe via RPC
-      const { data: profileArray } = await supabase.rpc('get_current_user_safe');
+      // Vérifier que le profil existe via RPC (avec fallback sync)
+      let profileArray = null;
+      const { data: rpcData } = await supabase.rpc('get_current_user_safe');
+      profileArray = rpcData;
 
       if (!profileArray || !Array.isArray(profileArray) || (profileArray as any[]).length === 0) {
-        // Profil non créé, déconnecter
+        // Profil pas encore créé → essayer de le synchroniser
+        await supabase.rpc('sync_current_user');
+        const { data: retryData } = await supabase.rpc('get_current_user_safe');
+        profileArray = retryData;
+      }
+
+      if (!profileArray || !Array.isArray(profileArray) || (profileArray as any[]).length === 0) {
+        // Toujours pas de profil → accès non autorisé
         await supabase.auth.signOut();
-        setErrorMessage('❌ Profil non trouvé. Contactez un administrateur.');
+        setErrorMessage('❌ Votre email n\'est pas autorisé. Contactez un administrateur.');
         setLoading(false);
         return;
       }
 
+      const profile = (profileArray as any[])[0];
       setSuccessMessage('✅ Connexion réussie !');
       
-      // Redirection selon rôle
-      if (['ADMIN', 'TREASURER', 'VALIDATOR'].includes(profile.role)) {
-        router.push('/dashboard');
-      } else {
-        router.push('/claims');
-      }
-      
+      // Utiliser window.location pour forcer le rechargement complet de la session
+      await new Promise(resolve => setTimeout(resolve, 500));
+      window.location.href = '/dashboard';
+
     } catch (error: any) {
       if (error.message.includes('Invalid login credentials')) {
         setErrorMessage('❌ Email ou mot de passe incorrect');

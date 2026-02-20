@@ -65,10 +65,10 @@ export default function CallbackHandler() {
         setStatus('Connexion réussie !');
       }
 
-      // Redirection vers page d'accueil (pas dashboard pour éviter race condition)
+      // Redirection vers dashboard
       await new Promise(resolve => setTimeout(resolve, 500));
-      window.location.href = '/';
-      
+      window.location.href = '/dashboard';
+
     } catch (err: any) {
       console.error('❌ Erreur callback:', err);
       setStatus('Erreur: ' + err.message);
