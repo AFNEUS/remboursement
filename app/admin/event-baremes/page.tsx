@@ -44,17 +44,6 @@ export default function EventBaremesPage() {
   }, []);
 
   async function checkAccess() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsed = JSON.parse(testUser);
-      if (parsed.role !== 'ADMIN') {
-        alert('❌ Accès refusé. Réservé aux Administrateurs.');
-        router.push('/');
-        return;
-      }
-      loadEvents();
-      return;
-    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

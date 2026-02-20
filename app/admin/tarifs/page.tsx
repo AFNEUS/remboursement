@@ -28,18 +28,6 @@ export default function TarifsAdminPage() {
   }, []);
 
   async function checkAdmin() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsed = JSON.parse(testUser);
-      if (parsed.role !== 'ADMIN') {
-        alert('❌ Accès refusé');
-        router.push('/');
-        return;
-      }
-      setCheckingAuth(false);
-      loadTarifs();
-      return;
-    }
 
     const { data } = await supabase.rpc('get_current_user_safe');
     if (!data || !Array.isArray(data) || (data as any[]).length === 0) {
@@ -59,39 +47,67 @@ export default function TarifsAdminPage() {
   }
 
   async function loadTarifs() {
-    // Charger depuis la config ou créer des valeurs par défaut
-    const defaultTarifs: TarifConfig[] = [
-      { id: '1', category: 'TRAIN', label: '🚄 Train (2nde classe)', default_amount: 0, max_amount: 150, description: 'Prix réel du billet' },
-      { id: '2', category: 'TRAIN_1ST', label: '🚄 Train (1ère classe)', default_amount: 0, max_amount: 250, description: 'Prix réel du billet' },
-      { id: '3', category: 'BUS', label: '🚌 Bus/Car', default_amount: 0, max_amount: 50, description: 'Prix réel du billet' },
-      { id: '4', category: 'TOLL', label: '🛣️ Péage', default_amount: 0, max_amount: 100, description: 'Prix réel du péage' },
-      { id: '5', category: 'PARKING', label: '🅿️ Parking', default_amount: 0, max_amount: 30, description: 'Prix réel du parking' },
-      { id: '6', category: 'MEAL', label: '🍽️ Repas', default_amount: 15, max_amount: 25, description: 'Forfait repas' },
-      { id: '7', category: 'HOTEL', label: '🏨 Hôtel (par nuit)', default_amount: 0, max_amount: 120, description: 'Prix réel de la chambre' },
-      { id: '8', category: 'TAXI', label: '🚕 Taxi', default_amount: 0, max_amount: 50, description: 'Prix réel de la course' },
-    ];
+    // Charger les plafonds depuis Supabase
+    const { data, error } = await supabase
+      .from('plafonds')
+      .select('*')
+      .is('valid_to', null)
+      .order('expense_type');
 
-    const saved = localStorage.getItem('admin_tarifs');
-    if (saved) {
-      setTarifs(JSON.parse(saved));
-    } else {
+    if (error || !data || data.length === 0) {
+      // Fallback: valeurs par défaut si la table est vide
+      const defaultTarifs: TarifConfig[] = [
+        { id: '1', category: 'TRAIN', label: '🚄 Train (2nde classe)', default_amount: 0, max_amount: 150, description: 'Prix réel du billet' },
+        { id: '2', category: 'TRAIN_1ST', label: '🚄 Train (1ère classe)', default_amount: 0, max_amount: 250, description: 'Prix réel du billet' },
+        { id: '3', category: 'BUS', label: '🚌 Bus/Car', default_amount: 0, max_amount: 50, description: 'Prix réel du billet' },
+        { id: '4', category: 'TOLL', label: '🛣️ Péage', default_amount: 0, max_amount: 100, description: 'Prix réel du péage' },
+        { id: '5', category: 'PARKING', label: '🅿️ Parking', default_amount: 0, max_amount: 30, description: 'Prix réel du parking' },
+        { id: '6', category: 'MEAL', label: '🍽️ Repas', default_amount: 15, max_amount: 25, description: 'Forfait repas' },
+        { id: '7', category: 'HOTEL', label: '🏨 Hôtel (par nuit)', default_amount: 0, max_amount: 120, description: 'Prix réel de la chambre' },
+        { id: '8', category: 'TAXI', label: '🚕 Taxi', default_amount: 0, max_amount: 50, description: 'Prix réel de la course' },
+      ];
       setTarifs(defaultTarifs);
-      localStorage.setItem('admin_tarifs', JSON.stringify(defaultTarifs));
+    } else {
+      const mapped: TarifConfig[] = data.map((p: any, i: number) => ({
+        id: p.id || String(i + 1),
+        category: p.expense_type?.toUpperCase() || p.category,
+        label: p.label || p.expense_type,
+        default_amount: p.default_amount ?? 0,
+        max_amount: p.ceiling_amount ?? p.max_amount ?? 999,
+        description: p.description || '',
+      }));
+      setTarifs(mapped);
     }
     setLoading(false);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!editing) return;
 
-    const updated = tarifs.map(t => 
-      t.id === editing 
+    const tarif = tarifs.find(t => t.id === editing);
+    if (!tarif) return;
+
+    // Mettre à jour dans Supabase
+    const { error } = await supabase
+      .from('plafonds')
+      // @ts-ignore
+      .update({
+        default_amount: formData.default_amount ?? 0,
+        ceiling_amount: formData.max_amount ?? 999,
+      })
+      .eq('id', editing);
+
+    if (error) {
+      alert('❌ Erreur lors de la sauvegarde : ' + error.message);
+      return;
+    }
+
+    const updated = tarifs.map(t =>
+      t.id === editing
         ? { ...t, default_amount: formData.default_amount || 0, max_amount: formData.max_amount || 0 }
         : t
     );
-
     setTarifs(updated);
-    localStorage.setItem('admin_tarifs', JSON.stringify(updated));
     alert('✅ Tarif mis à jour !');
     setEditing(null);
   }
@@ -235,7 +251,7 @@ export default function TarifsAdminPage() {
       </div>
 
       <div className="mt-4 text-sm text-gray-500">
-        <p>💡 <strong>Astuce :</strong> Les modifications sont sauvegardées localement et s&apos;appliquent immédiatement.</p>
+        <p>💡 <strong>Astuce :</strong> Les modifications sont sauvegardées en base de données et s&apos;appliquent immédiatement pour tous les utilisateurs.</p>
         <p>⚙️ Pour modifier les barèmes kilométriques, utilisez la page <a href="/admin/baremes" className="text-blue-600 underline">Barèmes</a>.</p>
       </div>
     </div>

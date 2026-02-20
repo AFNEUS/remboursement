@@ -27,18 +27,6 @@ export default function BaremesAdminPage() {
   }, []);
 
   async function checkAdmin() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsed = JSON.parse(testUser);
-      if (parsed.role !== 'ADMIN') {
-        alert('❌ Accès refusé - Réservé aux administrateurs');
-        router.push('/');
-        return;
-      }
-      setCheckingAuth(false);
-      loadBaremes();
-      return;
-    }
 
     const { data } = await supabase.rpc('get_current_user_safe');
     if (!data || !Array.isArray(data) || (data as any[]).length === 0) {

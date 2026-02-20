@@ -120,17 +120,6 @@ export default function AdminEventsPage() {
 
   // Load user
   async function loadUser() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsedUser = JSON.parse(testUser);
-      if (parsedUser.role !== 'ADMIN' && parsedUser.role !== 'admin_asso') {
-        alert('❌ Accès réservé aux administrateurs');
-        router.push('/');
-        return;
-      }
-      setUser(parsedUser);
-      return;
-    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

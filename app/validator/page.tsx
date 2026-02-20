@@ -29,18 +29,6 @@ export default function ValidatorDashboard() {
   }, [filter, user]);
 
   async function checkAccess() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsedUser = JSON.parse(testUser);
-      if (!['ADMIN', 'VALIDATOR', 'TREASURER'].includes(parsedUser.role)) {
-        alert('❌ Accès refusé. Page réservée aux validateurs.');
-        router.push('/');
-        return;
-      }
-      setUser(parsedUser);
-      setLoading(false);
-      return;
-    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

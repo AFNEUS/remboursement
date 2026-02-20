@@ -101,28 +101,37 @@ export default function NewClaimPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userRole]);
   
-  function loadTarifs() {
-    const saved = localStorage.getItem('admin_tarifs');
-    if (saved) {
-      const tarifsArray = JSON.parse(saved);
-      const tarifsMap: any = {};
-      tarifsArray.forEach((t: any) => {
-        tarifsMap[t.category] = t;
-      });
-      setTarifs(tarifsMap);
+  async function loadTarifs() {
+    try {
+      const { data, error } = await supabase
+        .from('plafonds')
+        .select('*')
+        .is('valid_to', null);
+
+      if (!error && data && data.length > 0) {
+        const tarifsMap: any = {};
+        data.forEach((p: any) => {
+          const key = (p.expense_type || p.category || '').toUpperCase();
+          tarifsMap[key] = {
+            ...p,
+            max_amount: p.ceiling_amount ?? p.max_amount ?? 999,
+          };
+        });
+        setTarifs(tarifsMap);
+      }
+    } catch (err) {
+      console.error('Erreur chargement tarifs:', err);
     }
   }
-  
+
+  // ...existing code...
+
+  function loadBaremes() {
+    // Charger les tarifs depuis Supabase
+    loadTarifs();
+  }
+
   async function loadUser() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsed = JSON.parse(testUser);
-      setUser(parsed);
-      setUserRole(parsed.role === 'ADMIN' ? 'admin_asso' : 'user');
-      setCheckingAuth(false);
-      return;
-    }
-    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       router.push('/');
@@ -148,11 +157,6 @@ export default function NewClaimPage() {
     } catch (error) {
       console.error('Erreur chargement utilisateurs:', error);
     }
-  }
-  
-  function loadBaremes() {
-    // Charger les tarifs depuis localStorage pour calculs
-    loadTarifs();
   }
   
   async function loadEvents() {

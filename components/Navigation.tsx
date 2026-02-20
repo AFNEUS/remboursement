@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,7 +10,7 @@ export default function Navigation() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [activeRole, setActiveRole] = useState<string | null>(null); // Rôle actif pour la vue
+  const [activeRole, setActiveRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
@@ -19,7 +18,6 @@ export default function Navigation() {
   useEffect(() => {
     checkUser();
     
-    // S'abonner aux changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (_event === 'SIGNED_OUT') {
         setUser(null);
@@ -37,18 +35,6 @@ export default function Navigation() {
 
   async function checkUser() {
     try {
-      // Vérifier le mode test
-      const testUser = localStorage.getItem('test_user');
-      if (testUser) {
-        const parsed = JSON.parse(testUser);
-        setUser(parsed);
-        setUserRole(parsed.role || 'MEMBER');
-        setProfileChecked(true);
-        setLoading(false);
-        return;
-      }
-
-      // Vérifier l'authentification Supabase avec getSession()
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
@@ -65,18 +51,20 @@ export default function Navigation() {
         // UTILISER RPC pour bypasser RLS (table users n'a pas de RLS, mais sécurisé via RPC)
         const { data: userData, error: userError } = await supabase
           .rpc('get_current_user_safe');
+        const userDataArr = userData as any[] | null;
 
-        if (!userError && userData && userData.length > 0) {
-          const dbUser = userData[0];
-          
+        if (!userError && userDataArr && userDataArr.length > 0) {
+          const dbUser = userDataArr[0];
+
           // Mapper le rôle DB (lowercase) vers UI (uppercase)
-          const mappedRole = ({
+          const roleMap: Record<string, string> = {
             'admin_asso': 'ADMIN',
             'treasurer': 'TREASURER',
             'validator': 'VALIDATOR',
             'bn_member': 'BN',
             'user': 'MEMBER'
-          }[dbUser.role] || 'MEMBER');
+          };
+          const mappedRole = roleMap[dbUser.role] || 'MEMBER';
 
           setUser({
             id: dbUser.id,
@@ -97,15 +85,17 @@ export default function Navigation() {
           if (!syncError) {
             // Retry avec RPC
             const { data: retryData } = await supabase.rpc('get_current_user_safe');
-            if (retryData && retryData.length > 0) {
-              const dbUser = retryData[0];
-              const mappedRole = ({
+            const retryDataArr = retryData as any[] | null;
+            if (retryDataArr && retryDataArr.length > 0) {
+              const dbUser = retryDataArr[0];
+              const retryRoleMap: Record<string, string> = {
                 'admin_asso': 'ADMIN',
                 'treasurer': 'TREASURER',
                 'validator': 'VALIDATOR',
                 'bn_member': 'BN',
                 'user': 'MEMBER'
-              }[dbUser.role] || 'MEMBER');
+              };
+              const mappedRole = retryRoleMap[dbUser.role] || 'MEMBER';
 
               setUser({
                 id: dbUser.id,
@@ -119,17 +109,17 @@ export default function Navigation() {
               setUserRole(mappedRole);
             } else {
               // Fallback minimal
-              setUser({ email: authUser.email, id: authUser.id, full_name: authUser.email.split('@')[0] });
+              setUser({ email: authUser.email ?? '', id: authUser.id, full_name: (authUser.email ?? '').split('@')[0] });
               setUserRole('MEMBER');
             }
           } else {
             console.error('❌ Sync failed:', syncError);
-            setUser({ email: authUser.email, id: authUser.id, full_name: authUser.email.split('@')[0] });
+            setUser({ email: authUser.email ?? '', id: authUser.id, full_name: (authUser.email ?? '').split('@')[0] });
             setUserRole('MEMBER');
           }
         } else {
           // Profil déjà checké mais toujours pas de user row: fallback minimal
-          setUser({ email: authUser.email, id: authUser.id, full_name: authUser.email.split('@')[0] });
+          setUser({ email: authUser.email ?? '', id: authUser.id, full_name: (authUser.email ?? '').split('@')[0] });
           setUserRole('MEMBER');
         }
       } else {
@@ -146,9 +136,8 @@ export default function Navigation() {
     setLoading(false);
   }
 
-    async function handleLogout() {
+  async function handleLogout() {
     await supabase.auth.signOut();
-    localStorage.removeItem('test_user');
     setUser(null);
     setUserRole(null);
     setActiveRole(null);

@@ -14,18 +14,6 @@ export default function AdminDashboard() {
   }, []);
 
   async function checkAdminAccess() {
-    // Mode test
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsed = JSON.parse(testUser);
-      if (parsed.role !== 'ADMIN') {
-        alert('❌ Accès refusé - Réservé aux administrateurs');
-        router.push('/');
-        return;
-      }
-      setLoading(false);
-      return;
-    }
 
     // Production: vérifier via Supabase
     const { data } = await supabase.rpc('get_current_user_safe');

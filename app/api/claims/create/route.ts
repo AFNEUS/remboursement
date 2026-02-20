@@ -1,10 +1,9 @@
 // @ts-nocheck - Types Supabase incompatibles avec schéma actuel
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { calculateReimbursableAmount, validateIBAN, generateClaimReference } from '@/lib/reimbursement';
+import { calculateReimbursableAmount, validateIBAN, generateClaimReference, detectDuplicates } from '@/lib/reimbursement';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { Database } from '@/lib/database.types';
 
 // Force dynamic rendering (uses cookies for auth)
 export const dynamic = 'force-dynamic';
@@ -75,6 +74,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Erreur lors de la récupération des paramètres' }, { status: 500 });
     }
     
+    // Vérifier les doublons : chercher les demandes récentes du même utilisateur
+    const { data: existingClaims } = await supabaseAdmin
+      .from('expense_claims')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('expense_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+
+    if (existingClaims) {
+      const { isDuplicate, duplicates } = await detectDuplicates(
+        { user_id: userId, expense_date: body.expense_date, amount_ttc: body.amount_ttc },
+        existingClaims
+      );
+      if (isDuplicate) {
+        console.warn('[API /api/claims/create] Doublon détecté:', duplicates.map(d => d.id));
+        return NextResponse.json(
+          {
+            error: 'Une demande similaire existe déjà (même date et même montant). Veuillez vérifier avant de soumettre.',
+            duplicates: duplicates.map(d => ({ id: d.id, status: d.status, created_at: d.created_at })),
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Calculer le montant remboursable
     const calculation = await calculateReimbursableAmount(
       body,

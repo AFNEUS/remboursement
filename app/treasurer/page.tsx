@@ -18,17 +18,6 @@ export default function TreasurerDashboard() {
   }, []);
 
   async function checkAccess() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsedUser = JSON.parse(testUser);
-      if (!['ADMIN', 'TREASURER'].includes(parsedUser.role)) {
-        alert('❌ Accès refusé. Page réservée aux trésoriers.');
-        router.push('/');
-        return;
-      }
-      fetchValidatedClaims();
-      return;
-    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

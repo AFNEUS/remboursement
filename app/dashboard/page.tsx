@@ -43,13 +43,6 @@ export default function DashboardPage() {
 
   async function loadUser() {
     try {
-      const testUser = localStorage.getItem('test_user');
-      if (testUser) {
-        const parsedUser = JSON.parse(testUser);
-        setUser(parsedUser);
-        setLoading(false);
-        return;
-      }
 
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 

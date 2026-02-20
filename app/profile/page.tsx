@@ -21,25 +21,6 @@ export default function ProfilePage() {
   }, []);
 
   async function loadUser() {
-    const testUser = localStorage.getItem('test_user');
-    if (testUser) {
-      const parsedUser = JSON.parse(testUser);
-      setUser(parsedUser);
-      setFirstName(parsedUser.first_name || '');
-      setLastName(parsedUser.last_name || '');
-      setIban(parsedUser.iban || '');
-      setProfile({
-        status_label: parsedUser.status_code,
-        coefficient: 1.0,
-        draft_claims: 0,
-        pending_claims: 0,
-        validated_claims: 0,
-        paid_claims: 0,
-        total_reimbursed: 0,
-      });
-      setLoading(false);
-      return;
-    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -94,7 +75,6 @@ export default function ProfilePage() {
   }
 
   async function handleLogout() {
-    localStorage.removeItem('test_user');
     await supabase.auth.signOut();
     router.push('/');
   }
